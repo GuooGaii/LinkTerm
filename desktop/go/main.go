@@ -9,11 +9,6 @@ import (
 	"os/signal"
 	"strings"
 	"syscall"
-
-	"terminal-client/internal/app"
-	"terminal-client/internal/config"
-	"terminal-client/internal/connector"
-	"terminal-client/internal/system"
 )
 
 func main() {
@@ -26,14 +21,14 @@ func main() {
 	configPath := flag.String("config", "config.json", "配置文件路径")
 	flag.Parse()
 
-	cfgManager := config.NewManager(*configPath)
+	cfgManager := NewConfigManager(*configPath)
 
-	var cfg *config.Config
+	var cfg *Config
 	var err error
 
 	if *serverURL != "" && *webURL != "" {
 		existing, _ := cfgManager.Load()
-		cfg = config.CreateWithDeviceID(existing, *serverURL, *webURL)
+		cfg = CreateConfigWithDeviceID(existing, *serverURL, *webURL)
 		if err := cfgManager.Save(cfg); err != nil {
 			log.Fatalf("保存配置失败: %v", err)
 		}
@@ -82,13 +77,13 @@ func handleCLIMode(args []string) bool {
 }
 
 func executePluginCommand(command string, args []string, configPath string) {
-	cfgManager := config.NewManager(configPath)
+	cfgManager := NewConfigManager(configPath)
 
 	prevOutput := log.Writer()
 	log.SetOutput(io.Discard)
 	defer log.SetOutput(prevOutput)
 
-	pluginManager, err := app.BuildPluginManager()
+	pluginManager, err := BuildPluginManager()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "初始化插件失败: %v\n", err)
 		os.Exit(1)
@@ -99,7 +94,7 @@ func executePluginCommand(command string, args []string, configPath string) {
 		os.Exit(1)
 	}
 
-	ctx := app.NewCommandRuntime(cfgManager, nil)
+	ctx := NewCommandRuntime(cfgManager, nil)
 	success, output := pluginManager.ExecuteCommand(command, ctx, args)
 	fmt.Print(output)
 	if !success {
@@ -107,7 +102,7 @@ func executePluginCommand(command string, args []string, configPath string) {
 	}
 }
 
-func runServer(cfgManager *config.Manager, cfg *config.Config) {
+func runServer(cfgManager *ConfigManager, cfg *Config) {
 	if cfg == nil {
 		fmt.Println("\n❌ 错误：未配置服务器地址")
 		fmt.Println("请使用以下方式之一进行配置：")
@@ -120,7 +115,7 @@ func runServer(cfgManager *config.Manager, cfg *config.Config) {
 
 	fmt.Println("\n正在启动服务...")
 
-	pluginManager, err := app.BuildPluginManager()
+	pluginManager, err := BuildPluginManager()
 	if err != nil {
 		log.Fatalf("构建插件管理器失败: %v", err)
 	}
@@ -133,10 +128,10 @@ func runServer(cfgManager *config.Manager, cfg *config.Config) {
 		log.Fatalf("启动插件失败: %v", err)
 	}
 
-	var registrar *system.CommandRegistrar
+	var registrar *CommandRegistrar
 	commands := pluginManager.ListCommands()
 	if len(commands) > 0 {
-		if reg := system.NewCommandRegistrar(commands); reg != nil {
+		if reg := NewCommandRegistrar(commands); reg != nil {
 			if err := reg.Register(); err != nil {
 				log.Printf("警告: 注册临时命令失败: %v", err)
 			} else {
@@ -145,9 +140,9 @@ func runServer(cfgManager *config.Manager, cfg *config.Config) {
 		}
 	}
 
-	client := connector.NewClient(cfg, cfgManager)
+	client := NewWebSocketClient(cfg, cfgManager)
 	client.SetPluginManager(pluginManager)
-	client.SetCommandContext(app.NewCommandRuntime(cfgManager, client))
+	client.SetCommandContext(NewCommandRuntime(cfgManager, client))
 
 	if err := client.Start(); err != nil {
 		if registrar != nil {

@@ -1,4 +1,4 @@
-package connector
+package main
 
 import (
 	"encoding/json"
@@ -11,36 +11,31 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
-
-	"terminal-client/internal/config"
-	"terminal-client/internal/plugins"
-	"terminal-client/internal/protocol"
-	"terminal-client/internal/pty"
 )
 
 const defaultTerminalID = "default"
 
-type Client struct {
-	config        *config.Config
-	configManager *config.Manager
+type WebSocketClient struct {
+	config        *Config
+	configManager *ConfigManager
 	ws            *websocket.Conn
 	sessionID     string
 	mu            sync.Mutex
 	stopChan      chan struct{}
 	reconnectCh   chan struct{}
-	pluginManager *plugins.Manager
-	commandCtx    plugins.CommandContext
+	pluginManager *PluginManager
+	commandCtx    CommandContext
 	lastConfigMod time.Time
 	sessions      map[string]*terminalSession
 }
 
 type terminalSession struct {
 	id      string
-	manager *pty.Manager
+	manager *PTYManager
 }
 
-func NewClient(cfg *config.Config, manager *config.Manager) *Client {
-	client := &Client{
+func NewWebSocketClient(cfg *Config, manager *ConfigManager) *WebSocketClient {
+	client := &WebSocketClient{
 		config:        cfg,
 		configManager: manager,
 		sessionID:     cfg.DeviceID,
@@ -51,22 +46,22 @@ func NewClient(cfg *config.Config, manager *config.Manager) *Client {
 	return client
 }
 
-func (c *Client) SetPluginManager(pm *plugins.Manager) {
+func (c *WebSocketClient) SetPluginManager(pm *PluginManager) {
 	c.pluginManager = pm
 }
 
-func (c *Client) SetCommandContext(ctx plugins.CommandContext) {
+func (c *WebSocketClient) SetCommandContext(ctx CommandContext) {
 	c.commandCtx = ctx
 }
 
-func (c *Client) normalizeTerminalID(id string) string {
+func (c *WebSocketClient) normalizeTerminalID(id string) string {
 	if strings.TrimSpace(id) == "" {
 		return defaultTerminalID
 	}
 	return strings.TrimSpace(id)
 }
 
-func (c *Client) ensureSession(id string) (*terminalSession, error) {
+func (c *WebSocketClient) ensureSession(id string) (*terminalSession, error) {
 	terminalID := c.normalizeTerminalID(id)
 
 	c.mu.Lock()
@@ -76,7 +71,7 @@ func (c *Client) ensureSession(id string) (*terminalSession, error) {
 	}
 	c.mu.Unlock()
 
-	manager, err := pty.NewManager()
+	manager, err := NewPTYManager()
 	if err != nil {
 		return nil, fmt.Errorf("创建 PTY 失败: %w", err)
 	}
@@ -107,7 +102,7 @@ func (c *Client) ensureSession(id string) (*terminalSession, error) {
 	return session, nil
 }
 
-func (c *Client) getSession(id string) (*terminalSession, bool) {
+func (c *WebSocketClient) getSession(id string) (*terminalSession, bool) {
 	terminalID := c.normalizeTerminalID(id)
 
 	c.mu.Lock()
@@ -117,7 +112,7 @@ func (c *Client) getSession(id string) (*terminalSession, bool) {
 	return session, ok
 }
 
-func (c *Client) closeSession(id string) {
+func (c *WebSocketClient) closeSession(id string) {
 	terminalID := c.normalizeTerminalID(id)
 
 	c.mu.Lock()
@@ -138,7 +133,7 @@ func (c *Client) closeSession(id string) {
 	log.Printf("🛑 终端会话已关闭: %s", terminalID)
 }
 
-func (c *Client) restartSession(id string) {
+func (c *WebSocketClient) restartSession(id string) {
 	terminalID := c.normalizeTerminalID(id)
 
 	c.closeSession(terminalID)
@@ -150,7 +145,7 @@ func (c *Client) restartSession(id string) {
 	log.Printf("✅ 终端进程已重启: %s", terminalID)
 }
 
-func (c *Client) handleSessionOutput(terminalID string, manager *pty.Manager) {
+func (c *WebSocketClient) handleSessionOutput(terminalID string, manager *PTYManager) {
 	for {
 		select {
 		case data := <-manager.Output():
@@ -172,29 +167,22 @@ func (c *Client) handleSessionOutput(terminalID string, manager *pty.Manager) {
 	}
 }
 
-func (c *Client) sendTerminalOutput(terminalID string, output string) {
+func (c *WebSocketClient) sendTerminalOutput(terminalID string, output string) {
 	if output == "" {
 		return
 	}
-	if err := c.sendMessage(protocol.MessageTypeDataOutput, "web", protocol.DataOutputData{
-		TerminalID: terminalID,
-		Output:     output,
-	}); err != nil {
+	if err := c.send(NewOutput(output)); err != nil {
 		log.Printf("发送终端输出失败 [%s]: %v", terminalID, err)
 	}
 }
 
-func (c *Client) sendTerminalInit(terminalID string, cols, rows int) {
-	if err := c.sendMessage(protocol.MessageTypeSystemInit, "web", protocol.SystemInitData{
-		TerminalID: terminalID,
-		Cols:       cols,
-		Rows:       rows,
-	}); err != nil {
+func (c *WebSocketClient) sendTerminalInit(terminalID string, cols, rows int) {
+	if err := c.send(NewInit(cols, rows)); err != nil {
 		log.Printf("发送终端初始化失败 [%s]: %v", terminalID, err)
 	}
 }
 
-func (c *Client) Start() error {
+func (c *WebSocketClient) Start() error {
 	log.Println("🚀 Terminal 启动中...")
 
 	// 创建默认终端会话
@@ -220,7 +208,7 @@ func (c *Client) Start() error {
 	return nil
 }
 
-func (c *Client) connectLoop() {
+func (c *WebSocketClient) connectLoop() {
 	for {
 		if err := c.connect(); err != nil {
 			log.Printf("连接失败: %v，3秒后重试...", err)
@@ -239,7 +227,7 @@ func (c *Client) connectLoop() {
 	}
 }
 
-func (c *Client) connect() error {
+func (c *WebSocketClient) connect() error {
 	u, err := url.Parse(c.config.ServerURL)
 	if err != nil {
 		return err
@@ -264,10 +252,10 @@ func (c *Client) connect() error {
 	log.Println("✅ 已连接到服务器")
 
 	// 注册设备
-	if err := c.sendMessage(protocol.MessageTypeConnectionDevices, "server", protocol.ConnectionDevicesData{
+	if err := c.send(NewSystem(SysCmdRegister, RegisterArgs{
 		DeviceType: "desktop",
-		Status:     "connected",
-	}); err != nil {
+		SessionID:  c.sessionID,
+	})); err != nil {
 		ws.Close()
 		return err
 	}
@@ -289,7 +277,7 @@ func (c *Client) connect() error {
 	return nil
 }
 
-func (c *Client) handleMessages() {
+func (c *WebSocketClient) handleMessages() {
 	defer func() {
 		c.mu.Lock()
 		if c.ws != nil {
@@ -314,100 +302,120 @@ func (c *Client) handleMessages() {
 			return
 		}
 
-		_, data, err := ws.ReadMessage()
-		if err != nil {
+		var msg Message
+		if err := ws.ReadJSON(&msg); err != nil {
 			log.Printf("读取消息失败: %v", err)
 			return
 		}
 
-		msg, err := protocol.ParseMessage(data)
-		if err != nil {
-			log.Printf("解析消息失败: %v", err)
-			continue
-		}
-
-		c.handleMessage(msg)
+		c.handleMessage(&msg)
 	}
 }
 
-func (c *Client) handleMessage(msg *protocol.Message) {
+func (c *WebSocketClient) handleMessage(msg *Message) {
 	switch msg.Type {
-	case protocol.MessageTypeConnectionPing:
-		c.sendMessage(protocol.MessageTypeConnectionPong, "server", map[string]interface{}{})
-
-	case protocol.MessageTypeDataInput:
-		var data protocol.DataInputData
-		if err := json.Unmarshal(msg.Data, &data); err != nil {
-			log.Printf("解析输入数据失败: %v", err)
-			return
-		}
-
-		sess, err := c.ensureSession(data.TerminalID)
-		if err != nil {
-			log.Printf("确保终端会话失败: %v", err)
-			return
-		}
-
-		if sess.manager != nil {
-			if err := sess.manager.Write([]byte(data.Input)); err != nil {
-				log.Printf("写入终端 %s 失败: %v", sess.id, err)
+	case TypeInput:
+		// 处理输入
+		if data, ok := msg.Data.(string); ok {
+			sess, err := c.ensureSession("default")
+			if err != nil {
+				log.Printf("确保终端会话失败: %v", err)
+				return
 			}
-		}
 
-	case protocol.MessageTypeConnectionDevices:
-		var data protocol.ConnectionDevicesData
-		if err := json.Unmarshal(msg.Data, &data); err == nil {
-			if data.Devices != nil {
-				if data.Devices["web"] == "connected" {
-					log.Println("🌐 网页端已连接")
-					// 网页端连接后，发送当前配置
-					if c.config != nil && c.config.Terminal != nil {
-						c.SendConfigUpdate(c.config.Terminal)
-					}
-				}
-			}
-			if data.DeviceType == "web" && data.Status == "disconnected" {
-				if data.TerminalID != "" {
-					c.closeSession(data.TerminalID)
+			if sess.manager != nil {
+				if err := sess.manager.Write([]byte(data)); err != nil {
+					log.Printf("写入终端失败: %v", err)
 				}
 			}
 		}
 
-	case protocol.MessageTypeSystemResize:
-		var data protocol.SystemResizeData
-		if err := json.Unmarshal(msg.Data, &data); err != nil {
-			log.Printf("解析 resize 数据失败: %v", err)
-			return
-		}
-
-		sess, err := c.ensureSession(data.TerminalID)
-		if err != nil {
-			log.Printf("确保终端会话失败: %v", err)
-			return
-		}
-
-		if sess.manager != nil && data.Cols > 0 && data.Rows > 0 {
-			if err := sess.manager.Resize(data.Cols, data.Rows); err != nil {
-				log.Printf("调整终端 %s 尺寸失败: %v", sess.id, err)
-			} else {
-				log.Printf("🔄 终端 %s 尺寸调整为: %dx%d", sess.id, data.Cols, data.Rows)
-			}
-		}
-
-	case protocol.MessageTypeSystemCommand:
-		var data protocol.SystemCommandData
-		if err := json.Unmarshal(msg.Data, &data); err != nil {
-			log.Printf("解析命令数据失败: %v", err)
-			return
-		}
-		c.handleSystemCommand(data.Command, data.TerminalID)
+	case TypeSystem:
+		// 处理系统消息
+		c.handleSystemMessage(msg.Data)
 
 	default:
 		log.Printf("未知消息类型: %s", msg.Type)
 	}
 }
 
-func (c *Client) handleSystemCommand(command string, terminalID string) {
+func (c *WebSocketClient) handleSystemMessage(data interface{}) {
+	// 尝试解析为结构化数据
+	jsonData, _ := json.Marshal(data)
+	var sysData SystemData
+	if err := json.Unmarshal(jsonData, &sysData); err != nil {
+		// 可能是字符串格式
+		if str, ok := data.(string); ok {
+			sysData.Cmd = str
+		} else {
+			log.Printf("解析系统消息失败: %v", err)
+			return
+		}
+	}
+
+	switch sysData.Cmd {
+	case SysCmdResize:
+		// 调整大小
+		if args, ok := sysData.Args.(map[string]interface{}); ok {
+			cols := int(args["cols"].(float64))
+			rows := int(args["rows"].(float64))
+
+			sess, err := c.ensureSession("default")
+			if err != nil {
+				log.Printf("确保终端会话失败: %v", err)
+				return
+			}
+
+			if sess.manager != nil && cols > 0 && rows > 0 {
+				if err := sess.manager.Resize(cols, rows); err != nil {
+					log.Printf("调整终端尺寸失败: %v", err)
+				} else {
+					log.Printf("🔄 终端尺寸调整为: %dx%d", cols, rows)
+				}
+			}
+		}
+
+	case SysCmdClear:
+		// 清屏
+		sess, _ := c.ensureSession("default")
+		if sess != nil && sess.manager != nil {
+			sess.manager.Write([]byte("\x1b[2J\x1b[H"))
+		}
+
+	case SysCmdRestart:
+		// 重启终端
+		c.restartSession("default")
+
+	case SysCmdPing:
+		// 响应 ping
+		c.send(NewSystem(SysCmdPong, nil))
+
+	case SysCmdConnected:
+		// 设备连接通知
+		if args, ok := sysData.Args.(map[string]interface{}); ok {
+			if deviceType, ok := args["deviceType"].(string); ok && deviceType == "web" {
+				log.Println("🌐 网页端已连接")
+				// 网页端连接后，发送当前配置
+				if c.config != nil && c.config.Terminal != nil {
+					c.SendConfigUpdate(c.config.Terminal)
+				}
+			}
+		}
+
+	case "ctrl_c":
+		// Ctrl+C
+		sess, _ := c.ensureSession("default")
+		if sess != nil && sess.manager != nil {
+			sess.manager.Write([]byte("\x03"))
+		}
+
+	default:
+		// 尝试作为命令处理
+		c.handleSystemCommand(sysData.Cmd, "default")
+	}
+}
+
+func (c *WebSocketClient) handleSystemCommand(command string, terminalID string) {
 	targetID := c.normalizeTerminalID(terminalID)
 
 	switch command {
@@ -443,7 +451,7 @@ func (c *Client) handleSystemCommand(command string, terminalID string) {
 }
 
 // handlePluginCommand 处理插件命令
-func (c *Client) handlePluginCommand(commandLine string, terminalID string) {
+func (c *WebSocketClient) handlePluginCommand(commandLine string, terminalID string) {
 	// 解析命令行：termconfig font Consolas
 	parts := strings.Fields(commandLine)
 	if len(parts) == 0 {
@@ -473,28 +481,18 @@ func (c *Client) handlePluginCommand(commandLine string, terminalID string) {
 	c.sendTerminalOutput(terminalID, output+"\n")
 }
 
-func (c *Client) sendMessage(msgType protocol.MessageType, to string, data interface{}) error {
-	msg, err := protocol.NewMessage(msgType, to, data)
-	if err != nil {
-		return err
-	}
-
-	msgBytes, err := msg.ToJSON()
-	if err != nil {
-		return err
-	}
-
+func (c *WebSocketClient) send(msg *Message) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	if c.ws != nil {
-		return c.ws.WriteMessage(websocket.TextMessage, msgBytes)
+		return c.ws.WriteJSON(msg)
 	}
 
-	return nil
+	return fmt.Errorf("websocket 未连接")
 }
 
-func (c *Client) Stop() {
+func (c *WebSocketClient) Stop() {
 	close(c.stopChan)
 
 	c.mu.Lock()
@@ -516,38 +514,28 @@ func (c *Client) Stop() {
 }
 
 // SendConfigUpdate 发送配置更新到Web端
-func (c *Client) SendConfigUpdate(cfg *config.TerminalConfig) {
+func (c *WebSocketClient) SendConfigUpdate(cfg *TerminalConfig) {
 	if cfg == nil {
 		log.Printf("警告: 配置为空，跳过发送")
 		return
 	}
 
-	configData := protocol.SystemConfigData{
-		FontFamily:  cfg.FontFamily,
-		FontSize:    cfg.FontSize,
-		Theme:       cfg.Theme,
-		ThemeColors: config.ThemeColors(cfg.Theme),
-		Opacity:     cfg.Opacity,
-		CursorBlink: cfg.CursorBlink,
-		LineHeight:  cfg.LineHeight,
-	}
-
 	log.Printf("准备发送配置到Web端: FontFamily=%s, FontSize=%d, Theme=%s",
-		configData.FontFamily, configData.FontSize, configData.Theme)
+		cfg.FontFamily, cfg.FontSize, cfg.Theme)
 
-	if err := c.sendMessage(protocol.MessageTypeSystemConfig, "web", configData); err != nil {
+	if err := c.send(NewConfig(cfg)); err != nil {
 		log.Printf("发送配置更新失败: %v", err)
 	} else {
 		log.Printf("配置更新已发送到Web端")
 	}
 }
 
-// NotifyConfigUpdated implements app.ConfigNotifier.
-func (c *Client) NotifyConfigUpdated(cfg *config.TerminalConfig) {
+// NotifyConfigUpdated implements ConfigNotifier.
+func (c *WebSocketClient) NotifyConfigUpdated(cfg *TerminalConfig) {
 	c.SendConfigUpdate(cfg)
 }
 
-func (c *Client) watchConfigFile() {
+func (c *WebSocketClient) watchConfigFile() {
 	if c.configManager == nil {
 		return
 	}

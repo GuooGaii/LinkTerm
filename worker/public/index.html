@@ -141,9 +141,11 @@
                 if (!ws || ws.readyState !== WebSocket.OPEN || !terminal) return;
 
                 ws.send(JSON.stringify({
-                    type: 'system.resize',
-                    to: 'desktop',
-                    data: { cols: terminal.cols, rows: terminal.rows }
+                    type: 'system',
+                    data: {
+                        cmd: 'resize',
+                        args: { cols: terminal.cols, rows: terminal.rows }
+                    }
                 }));
             }
 
@@ -277,9 +279,8 @@
                 terminal.onData((data) => {
                     if (ws && ws.readyState === WebSocket.OPEN) {
                         ws.send(JSON.stringify({
-                            type: 'data.input',
-                            to: 'desktop',
-                            data: { input: data }
+                            type: 'input',
+                            data: data
                         }));
                     }
                 });
@@ -316,9 +317,8 @@
                     writeSystemMessage('[web] connected', 92);
 
                     ws.send(JSON.stringify({
-                        type: 'connection.devices',
-                        to: 'all',
-                        data: { deviceType: 'web', status: 'connected' }
+                        type: 'system',
+                        data: { cmd: 'register', args: { deviceType: 'web' } }
                     }));
                 });
 
@@ -327,36 +327,46 @@
                         const message = JSON.parse(event.data);
 
                         switch (message.type) {
-                            case 'data.output':
-                                if (message.data && message.data.output) {
-                                    terminal.write(message.data.output);
+                            case 'output':
+                                // 终端输出
+                                if (message.data) {
+                                    terminal.write(message.data);
                                 }
                                 break;
 
-                            case 'system.init':
-                                if (message.data && message.data.cols && message.data.rows) {
-                                    terminal.resize(message.data.cols, message.data.rows);
-                                    fitAddon.fit();
+                            case 'system':
+                                // 系统消息
+                                const sysData = message.data;
+                                const cmd = typeof sysData === 'string' ? sysData : sysData.cmd;
+                                const args = sysData.args || {};
+
+                                switch (cmd) {
+                                    case 'init':
+                                        if (args.cols && args.rows) {
+                                            terminal.resize(args.cols, args.rows);
+                                            fitAddon.fit();
+                                        }
+                                        break;
+
+                                    case 'config':
+                                        applyConfig(args);
+                                        break;
+
+                                    case 'connected':
+                                        if (args.deviceType === 'desktop') {
+                                            showStatus('');
+                                            writeSystemMessage('[desktop] connected', 92);
+                                            sendResize();
+                                        }
+                                        break;
+
+                                    case 'disconnected':
+                                        if (args.deviceType === 'desktop') {
+                                            showStatus('等待桌面端连接...', 'warn');
+                                            writeSystemMessage('[desktop] disconnected', 91);
+                                        }
+                                        break;
                                 }
-                                break;
-
-                            case 'connection.devices':
-                                if (message.data && message.data.devices) {
-                                    const desktopConnected = message.data.devices.desktop === 'connected';
-
-                                    if (desktopConnected) {
-                                        showStatus('');
-                                        writeSystemMessage('[desktop] connected', 92);
-                                        sendResize();
-                                    } else {
-                                        showStatus('等待桌面端连接...', 'warn');
-                                        writeSystemMessage('[desktop] disconnected', 91);
-                                    }
-                                }
-                                break;
-
-                            case 'system.config':
-                                applyConfig(message.data || {});
                                 break;
 
                             default:

@@ -1,4 +1,4 @@
-package config
+package main
 
 import (
 	"encoding/json"
@@ -8,23 +8,23 @@ import (
 	"github.com/google/uuid"
 )
 
-// Manager provides helpers to work with the configuration file on disk.
-type Manager struct {
+// ConfigManager provides helpers to work with the configuration file on disk.
+type ConfigManager struct {
 	path string
 }
 
-// NewManager constructs a configuration manager for the given path.
-func NewManager(path string) *Manager {
-	return &Manager{path: path}
+// NewConfigManager constructs a configuration manager for the given path.
+func NewConfigManager(path string) *ConfigManager {
+	return &ConfigManager{path: path}
 }
 
 // Path returns the configured file path.
-func (m *Manager) Path() string {
+func (m *ConfigManager) Path() string {
 	return m.path
 }
 
 // Load reads configuration from disk and normalises terminal settings.
-func (m *Manager) Load() (*Config, error) {
+func (m *ConfigManager) Load() (*Config, error) {
 	data, err := os.ReadFile(m.path)
 	if err != nil {
 		return nil, err
@@ -51,7 +51,7 @@ func (m *Manager) Load() (*Config, error) {
 }
 
 // Save writes configuration back to disk ensuring defaults are present.
-func (m *Manager) Save(cfg *Config) error {
+func (m *ConfigManager) Save(cfg *Config) error {
 	if cfg.Terminal == nil {
 		cfg.Terminal = CloneTerminal(DefaultTerminal())
 	}
@@ -74,9 +74,9 @@ func EnsureDeviceID(cfg *Config) bool {
 	return true
 }
 
-// CreateWithDeviceID builds a config using supplied endpoints and an optional
+// CreateConfigWithDeviceID builds a config using supplied endpoints and an optional
 // existing configuration for reusing the DeviceID.
-func CreateWithDeviceID(existing *Config, serverURL, webURL string) *Config {
+func CreateConfigWithDeviceID(existing *Config, serverURL, webURL string) *Config {
 	deviceID := ""
 	if existing != nil {
 		deviceID = existing.DeviceID

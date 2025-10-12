@@ -10,12 +10,13 @@ directory = "./public"
 binding = "ASSETS"
 
 [[durable_objects.bindings]]
-class_name = "TerminalSessionManager"
-name = "TERMINAL_SESSION_MANAGER"
+class_name = "SessionManager"
+name = "SESSIONS"
 
 [[migrations]]
-tag = "v1"
-new_sqlite_classes = ["TerminalSessionManager"]
+tag = "v3"
+new_sqlite_classes = ["SessionManager"]
+deleted_classes = ["TerminalSessionManager"]
 
 [observability]
 enabled = true

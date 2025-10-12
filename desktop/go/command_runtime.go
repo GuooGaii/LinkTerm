@@ -1,39 +1,36 @@
-package app
+package main
 
 import (
 	"fmt"
-
-	"terminal-client/internal/config"
-	"terminal-client/internal/plugins"
 )
 
 // ConfigNotifier defines a callback for configuration updates.
 type ConfigNotifier interface {
-	NotifyConfigUpdated(*config.TerminalConfig)
+	NotifyConfigUpdated(*TerminalConfig)
 }
 
-// CommandRuntime implements plugins.CommandContext.
+// CommandRuntime implements CommandContext from plugins.
 type CommandRuntime struct {
-	manager  *config.Manager
+	manager  *ConfigManager
 	notifier ConfigNotifier
 }
 
 // NewCommandRuntime creates a runtime context with optional notifier.
-func NewCommandRuntime(manager *config.Manager, notifier ConfigNotifier) *CommandRuntime {
+func NewCommandRuntime(manager *ConfigManager, notifier ConfigNotifier) *CommandRuntime {
 	return &CommandRuntime{
 		manager:  manager,
 		notifier: notifier,
 	}
 }
 
-func (r *CommandRuntime) LoadConfig() (*config.Config, error) {
+func (r *CommandRuntime) LoadConfig() (*Config, error) {
 	if r.manager == nil {
 		return nil, fmt.Errorf("config manager unavailable")
 	}
 	return r.manager.Load()
 }
 
-func (r *CommandRuntime) SaveConfig(cfg *config.Config) error {
+func (r *CommandRuntime) SaveConfig(cfg *Config) error {
 	if r.manager == nil {
 		return fmt.Errorf("config manager unavailable")
 	}
@@ -47,10 +44,8 @@ func (r *CommandRuntime) ConfigPath() string {
 	return r.manager.Path()
 }
 
-func (r *CommandRuntime) NotifyConfigUpdated(cfg *config.TerminalConfig) {
+func (r *CommandRuntime) NotifyConfigUpdated(cfg *TerminalConfig) {
 	if r.notifier != nil {
 		r.notifier.NotifyConfigUpdated(cfg)
 	}
 }
-
-var _ plugins.CommandContext = (*CommandRuntime)(nil)

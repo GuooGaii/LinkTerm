@@ -1,18 +1,16 @@
-package plugins
+package main
 
 import (
 	"context"
 	"fmt"
-
-	"terminal-client/internal/config"
 )
 
 // CommandContext 为命令插件暴露运行时能力。
 type CommandContext interface {
-	LoadConfig() (*config.Config, error)
-	SaveConfig(*config.Config) error
+	LoadConfig() (*Config, error)
+	SaveConfig(*Config) error
 	ConfigPath() string
-	NotifyConfigUpdated(*config.TerminalConfig)
+	NotifyConfigUpdated(*TerminalConfig)
 }
 
 // Plugin 描述插件公共生命周期。

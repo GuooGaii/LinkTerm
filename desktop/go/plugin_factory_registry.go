@@ -1,4 +1,4 @@
-package plugins
+package main
 
 import (
 	"fmt"
@@ -6,17 +6,17 @@ import (
 	"sync"
 )
 
-// Factory 构造插件实例，允许在构造时收到插件管理器。
-type Factory func(*Manager) (Plugin, error)
+// PluginFactory 构造插件实例，允许在构造时收到插件管理器。
+type PluginFactory func(*PluginManager) (Plugin, error)
 
 var (
 	factoryMu    sync.RWMutex
-	factories    = map[string]Factory{}
+	factories    = map[string]PluginFactory{}
 	factoryNames []string
 )
 
-// RegisterFactory 注册插件工厂。重复注册或无效输入会 panic，以便在开发阶段及时暴露问题。
-func RegisterFactory(name string, factory Factory) {
+// RegisterPluginFactory 注册插件工厂。重复注册或无效输入会 panic，以便在开发阶段及时暴露问题。
+func RegisterPluginFactory(name string, factory PluginFactory) {
 	if name == "" {
 		panic("plugins: factory name cannot be empty")
 	}
@@ -36,18 +36,18 @@ func RegisterFactory(name string, factory Factory) {
 	sort.Strings(factoryNames)
 }
 
-type factoryEntry struct {
+type pluginFactoryEntry struct {
 	name    string
-	factory Factory
+	factory PluginFactory
 }
 
-func registeredFactories() []factoryEntry {
+func registeredFactories() []pluginFactoryEntry {
 	factoryMu.RLock()
 	defer factoryMu.RUnlock()
 
-	entries := make([]factoryEntry, 0, len(factoryNames))
+	entries := make([]pluginFactoryEntry, 0, len(factoryNames))
 	for _, name := range factoryNames {
-		entries = append(entries, factoryEntry{
+		entries = append(entries, pluginFactoryEntry{
 			name:    name,
 			factory: factories[name],
 		})

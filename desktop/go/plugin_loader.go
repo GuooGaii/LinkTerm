@@ -1,9 +1,9 @@
-package plugins
+package main
 
 import "fmt"
 
-// LoadAll 实例化所有已注册的插件工厂并加入管理器。
-func LoadAll(manager *Manager) error {
+// LoadAllPlugins 实例化所有已注册的插件工厂并加入管理器。
+func LoadAllPlugins(manager *PluginManager) error {
 	if manager == nil {
 		return fmt.Errorf("plugins: manager cannot be nil")
 	}

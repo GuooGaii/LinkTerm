@@ -1,4 +1,4 @@
-package termconfig
+package main
 
 import (
 	"context"
@@ -12,35 +12,32 @@ import (
 	"strings"
 
 	"github.com/AlecAivazis/survey/v2"
-
-	"terminal-client/internal/config"
-	"terminal-client/internal/plugins"
 )
 
 const (
-	pluginName        = "termconfig"
-	pluginVersion     = "1.0.0"
-	pluginDescription = "终端配置命令 - 管理终端外观和行为设置"
+	termconfigPluginName        = "termconfig"
+	termconfigPluginVersion     = "1.0.0"
+	termconfigPluginDescription = "终端配置命令 - 管理终端外观和行为设置"
 )
 
 // TermConfigPlugin 管理终端外观和行为设置的命令插件。
 type TermConfigPlugin struct{}
 
-// New 创建 termconfig 插件。
-func New() (*TermConfigPlugin, error) {
+// NewTermConfigPlugin 创建 termconfig 插件。
+func NewTermConfigPlugin() (*TermConfigPlugin, error) {
 	return &TermConfigPlugin{}, nil
 }
 
 func (p *TermConfigPlugin) Name() string {
-	return pluginName
+	return termconfigPluginName
 }
 
 func (p *TermConfigPlugin) Description() string {
-	return pluginDescription
+	return termconfigPluginDescription
 }
 
 func (p *TermConfigPlugin) Version() string {
-	return pluginVersion
+	return termconfigPluginVersion
 }
 
 func (p *TermConfigPlugin) Dependencies() []string {
@@ -96,7 +93,7 @@ func (p *TermConfigPlugin) Stop(ctx context.Context) error {
 	return nil
 }
 
-func (p *TermConfigPlugin) Execute(ctx plugins.CommandContext, args []string) (bool, string) {
+func (p *TermConfigPlugin) Execute(ctx CommandContext, args []string) (bool, string) {
 	if len(args) == 0 {
 		return true, p.Usage()
 	}
@@ -129,7 +126,7 @@ func (p *TermConfigPlugin) Execute(ctx plugins.CommandContext, args []string) (b
 	}
 }
 
-func (p *TermConfigPlugin) handleFont(ctx plugins.CommandContext, args []string) (bool, string) {
+func (p *TermConfigPlugin) handleFont(ctx CommandContext, args []string) (bool, string) {
 	cfg, err := p.loadConfig(ctx)
 	if err != nil {
 		return false, fmt.Sprintf("❌ 加载配置失败: %v", err)
@@ -161,17 +158,17 @@ func (p *TermConfigPlugin) handleFont(ctx plugins.CommandContext, args []string)
 	return false, fmt.Sprintf("❌ 未找到字体: %s\n可用字体: %v", font, sortedFonts)
 }
 
-func (p *TermConfigPlugin) updateFontFamily(cfg *config.Config, font string) string {
+func (p *TermConfigPlugin) updateFontFamily(cfg *Config, font string) string {
 	if cfg.Terminal == nil {
-		cfg.Terminal = config.CloneTerminal(config.DefaultTerminal())
+		cfg.Terminal = CloneTerminal(DefaultTerminal())
 	}
 
-	cfg.Terminal.FontFamily = fmt.Sprintf("%s, %s", font, config.DefaultTerminal().FontFamily)
+	cfg.Terminal.FontFamily = fmt.Sprintf("%s, %s", font, DefaultTerminal().FontFamily)
 
 	return fmt.Sprintf("✅ 字体已设置为: %s", font)
 }
 
-func (p *TermConfigPlugin) handleFontSize(ctx plugins.CommandContext, args []string) (bool, string) {
+func (p *TermConfigPlugin) handleFontSize(ctx CommandContext, args []string) (bool, string) {
 	cfg, err := p.loadConfig(ctx)
 	if err != nil {
 		return false, fmt.Sprintf("❌ 加载配置失败: %v", err)
@@ -190,7 +187,7 @@ func (p *TermConfigPlugin) handleFontSize(ctx plugins.CommandContext, args []str
 	return p.saveAndPush(ctx, cfg, fmt.Sprintf("✅ 字体大小已设置为: %d", size))
 }
 
-func (p *TermConfigPlugin) handleTheme(ctx plugins.CommandContext, args []string) (bool, string) {
+func (p *TermConfigPlugin) handleTheme(ctx CommandContext, args []string) (bool, string) {
 	cfg, err := p.loadConfig(ctx)
 	if err != nil {
 		return false, fmt.Sprintf("❌ 加载配置失败: %v", err)
@@ -221,16 +218,16 @@ func (p *TermConfigPlugin) handleTheme(ctx plugins.CommandContext, args []string
 	return false, fmt.Sprintf("❌ 未找到主题: %s\n可用主题: %v", theme, themes)
 }
 
-func (p *TermConfigPlugin) updateTheme(cfg *config.Config, theme string) string {
+func (p *TermConfigPlugin) updateTheme(cfg *Config, theme string) string {
 	if cfg.Terminal == nil {
-		cfg.Terminal = config.CloneTerminal(config.DefaultTerminal())
+		cfg.Terminal = CloneTerminal(DefaultTerminal())
 	}
 
 	cfg.Terminal.Theme = theme
 	return fmt.Sprintf("✅ 主题已设置为: %s", theme)
 }
 
-func (p *TermConfigPlugin) handleOpacity(ctx plugins.CommandContext, args []string) (bool, string) {
+func (p *TermConfigPlugin) handleOpacity(ctx CommandContext, args []string) (bool, string) {
 	cfg, err := p.loadConfig(ctx)
 	if err != nil {
 		return false, fmt.Sprintf("❌ 加载配置失败: %v", err)
@@ -249,7 +246,7 @@ func (p *TermConfigPlugin) handleOpacity(ctx plugins.CommandContext, args []stri
 	return p.saveAndPush(ctx, cfg, fmt.Sprintf("✅ 透明度已设置为: %.1f", opacity))
 }
 
-func (p *TermConfigPlugin) handleCursor(ctx plugins.CommandContext, args []string) (bool, string) {
+func (p *TermConfigPlugin) handleCursor(ctx CommandContext, args []string) (bool, string) {
 	cfg, err := p.loadConfig(ctx)
 	if err != nil {
 		return false, fmt.Sprintf("❌ 加载配置失败: %v", err)
@@ -275,7 +272,7 @@ func (p *TermConfigPlugin) handleCursor(ctx plugins.CommandContext, args []strin
 	}
 }
 
-func (p *TermConfigPlugin) handleLineHeight(ctx plugins.CommandContext, args []string) (bool, string) {
+func (p *TermConfigPlugin) handleLineHeight(ctx CommandContext, args []string) (bool, string) {
 	cfg, err := p.loadConfig(ctx)
 	if err != nil {
 		return false, fmt.Sprintf("❌ 加载配置失败: %v", err)
@@ -294,7 +291,7 @@ func (p *TermConfigPlugin) handleLineHeight(ctx plugins.CommandContext, args []s
 	return p.saveAndPush(ctx, cfg, fmt.Sprintf("✅ 行高已设置为: %.2f", height))
 }
 
-func (p *TermConfigPlugin) handleList(ctx plugins.CommandContext) (bool, string) {
+func (p *TermConfigPlugin) handleList(ctx CommandContext) (bool, string) {
 	cfg, err := p.loadConfig(ctx)
 	if err != nil {
 		return false, fmt.Sprintf("❌ 加载配置失败: %v", err)
@@ -304,7 +301,7 @@ func (p *TermConfigPlugin) handleList(ctx plugins.CommandContext) (bool, string)
 	return true, fmt.Sprintf("当前配置:\n%s", string(data))
 }
 
-func (p *TermConfigPlugin) handleReset(ctx plugins.CommandContext) (bool, string) {
+func (p *TermConfigPlugin) handleReset(ctx CommandContext) (bool, string) {
 	prompt := &survey.Confirm{
 		Message: "确定要重置为默认配置吗？",
 		Default: false,
@@ -320,11 +317,11 @@ func (p *TermConfigPlugin) handleReset(ctx plugins.CommandContext) (bool, string
 		return false, fmt.Sprintf("❌ 加载配置失败: %v", err)
 	}
 
-	cfg.Terminal = config.CloneTerminal(config.DefaultTerminal())
+	cfg.Terminal = CloneTerminal(DefaultTerminal())
 	return p.saveAndPush(ctx, cfg, "✅ 配置已重置为默认值")
 }
 
-func (p *TermConfigPlugin) loadConfig(ctx plugins.CommandContext) (*config.Config, error) {
+func (p *TermConfigPlugin) loadConfig(ctx CommandContext) (*Config, error) {
 	if ctx == nil {
 		return nil, errors.New("命令上下文不可用")
 	}
@@ -332,20 +329,20 @@ func (p *TermConfigPlugin) loadConfig(ctx plugins.CommandContext) (*config.Confi
 	cfg, err := ctx.LoadConfig()
 	if err != nil {
 		if os.IsNotExist(err) {
-			return &config.Config{
-				Terminal: config.CloneTerminal(config.DefaultTerminal()),
+			return &Config{
+				Terminal: CloneTerminal(DefaultTerminal()),
 			}, nil
 		}
 		return nil, err
 	}
 
 	if cfg.Terminal == nil {
-		cfg.Terminal = config.CloneTerminal(config.DefaultTerminal())
+		cfg.Terminal = CloneTerminal(DefaultTerminal())
 	}
 	return cfg, nil
 }
 
-func (p *TermConfigPlugin) saveAndPush(ctx plugins.CommandContext, cfg *config.Config, message string) (bool, string) {
+func (p *TermConfigPlugin) saveAndPush(ctx CommandContext, cfg *Config, message string) (bool, string) {
 	if ctx == nil {
 		return false, "命令上下文不可用"
 	}
@@ -408,7 +405,7 @@ func getSortedFonts() []string {
 }
 
 func init() {
-	plugins.RegisterFactory("termconfig", func(pm *plugins.Manager) (plugins.Plugin, error) {
-		return New()
+	RegisterPluginFactory("termconfig", func(pm *PluginManager) (Plugin, error) {
+		return NewTermConfigPlugin()
 	})
 }

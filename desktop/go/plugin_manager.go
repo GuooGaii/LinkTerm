@@ -1,4 +1,4 @@
-package plugins
+package main
 
 import (
 	"context"
@@ -8,8 +8,8 @@ import (
 	"sync"
 )
 
-// Manager keeps track of all registered plugins and their lifecycle.
-type Manager struct {
+// PluginManager keeps track of all registered plugins and their lifecycle.
+type PluginManager struct {
 	plugins        map[string]Plugin
 	commandPlugins map[string]CommandPlugin
 	enabledPlugins map[string]bool
@@ -19,10 +19,10 @@ type Manager struct {
 	started        bool
 }
 
-// NewManager creates a fresh plugin manager.
-func NewManager() *Manager {
+// NewPluginManager creates a fresh plugin manager.
+func NewPluginManager() *PluginManager {
 	ctx, cancel := context.WithCancel(context.Background())
-	return &Manager{
+	return &PluginManager{
 		plugins:        make(map[string]Plugin),
 		commandPlugins: make(map[string]CommandPlugin),
 		enabledPlugins: make(map[string]bool),
@@ -32,7 +32,7 @@ func NewManager() *Manager {
 }
 
 // Register adds a plugin to the manager.
-func (pm *Manager) Register(plugin Plugin) error {
+func (pm *PluginManager) Register(plugin Plugin) error {
 	pm.mu.Lock()
 	defer pm.mu.Unlock()
 
@@ -65,7 +65,7 @@ func (pm *Manager) Register(plugin Plugin) error {
 }
 
 // InitAll initialises plugins respecting dependencies.
-func (pm *Manager) InitAll() error {
+func (pm *PluginManager) InitAll() error {
 	order, err := pm.resolveDependencies()
 	if err != nil {
 		return err
@@ -83,7 +83,7 @@ func (pm *Manager) InitAll() error {
 }
 
 // StartAll starts all plugins.
-func (pm *Manager) StartAll() error {
+func (pm *PluginManager) StartAll() error {
 	pm.mu.Lock()
 	defer pm.mu.Unlock()
 
@@ -110,7 +110,7 @@ func (pm *Manager) StartAll() error {
 }
 
 // StopAll stops all plugins in reverse order.
-func (pm *Manager) StopAll() {
+func (pm *PluginManager) StopAll() {
 	pm.mu.Lock()
 	defer pm.mu.Unlock()
 
@@ -142,7 +142,7 @@ func (pm *Manager) StopAll() {
 }
 
 // GetCommand retrieves a command plugin by name.
-func (pm *Manager) GetCommand(name string) (CommandPlugin, bool) {
+func (pm *PluginManager) GetCommand(name string) (CommandPlugin, bool) {
 	pm.mu.RLock()
 	defer pm.mu.RUnlock()
 
@@ -151,7 +151,7 @@ func (pm *Manager) GetCommand(name string) (CommandPlugin, bool) {
 }
 
 // ListCommands returns registered command names sorted alphabetically.
-func (pm *Manager) ListCommands() []string {
+func (pm *PluginManager) ListCommands() []string {
 	pm.mu.RLock()
 	defer pm.mu.RUnlock()
 
@@ -165,7 +165,7 @@ func (pm *Manager) ListCommands() []string {
 }
 
 // GetPlugin returns a plugin by name.
-func (pm *Manager) GetPlugin(name string) (Plugin, bool) {
+func (pm *PluginManager) GetPlugin(name string) (Plugin, bool) {
 	pm.mu.RLock()
 	defer pm.mu.RUnlock()
 	plugin, exists := pm.plugins[name]
@@ -173,7 +173,7 @@ func (pm *Manager) GetPlugin(name string) (Plugin, bool) {
 }
 
 // ListPlugins collects metadata for registered plugins.
-func (pm *Manager) ListPlugins() []PluginInfo {
+func (pm *PluginManager) ListPlugins() []PluginInfo {
 	pm.mu.RLock()
 	defer pm.mu.RUnlock()
 
@@ -196,7 +196,7 @@ func (pm *Manager) ListPlugins() []PluginInfo {
 	return metadata
 }
 
-func (pm *Manager) resolveDependencies() ([]string, error) {
+func (pm *PluginManager) resolveDependencies() ([]string, error) {
 	visited := make(map[string]bool)
 	visiting := make(map[string]bool)
 	order := []string{}
@@ -242,7 +242,7 @@ func (pm *Manager) resolveDependencies() ([]string, error) {
 }
 
 // GetCommandHelp returns extended help for commands.
-func (pm *Manager) GetCommandHelp(commandName string) string {
+func (pm *PluginManager) GetCommandHelp(commandName string) string {
 	pm.mu.RLock()
 	defer pm.mu.RUnlock()
 
@@ -257,7 +257,7 @@ func (pm *Manager) GetCommandHelp(commandName string) string {
 }
 
 // ExecuteCommand runs a command plugin.
-func (pm *Manager) ExecuteCommand(commandName string, ctx CommandContext, args []string) (bool, string) {
+func (pm *PluginManager) ExecuteCommand(commandName string, ctx CommandContext, args []string) (bool, string) {
 	plugin, exists := pm.GetCommand(commandName)
 	if !exists {
 		return false, fmt.Sprintf("未知命令: %s\n\n可用命令: %v", commandName, pm.ListCommands())

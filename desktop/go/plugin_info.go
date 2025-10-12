@@ -1,42 +1,40 @@
-package info
+package main
 
 import (
 	"context"
 	"fmt"
 	"runtime"
 	"strings"
-
-	"terminal-client/internal/plugins"
 )
 
 const (
-	pluginName        = "info"
-	pluginVersion     = "1.0.0"
-	pluginDescription = "显示系统和插件信息"
+	infoPluginName        = "info"
+	infoPluginVersion     = "1.0.0"
+	infoPluginDescription = "显示系统和插件信息"
 )
 
 // InfoPlugin exposes runtime and plugin details.
 type InfoPlugin struct {
-	pluginManager *plugins.Manager
+	pluginManager *PluginManager
 }
 
-// New constructs the info command plugin.
-func New(pm *plugins.Manager) (*InfoPlugin, error) {
+// NewInfoPlugin constructs the info command plugin.
+func NewInfoPlugin(pm *PluginManager) (*InfoPlugin, error) {
 	return &InfoPlugin{
 		pluginManager: pm,
 	}, nil
 }
 
 func (p *InfoPlugin) Name() string {
-	return pluginName
+	return infoPluginName
 }
 
 func (p *InfoPlugin) Description() string {
-	return pluginDescription
+	return infoPluginDescription
 }
 
 func (p *InfoPlugin) Version() string {
-	return pluginVersion
+	return infoPluginVersion
 }
 
 func (p *InfoPlugin) Dependencies() []string {
@@ -62,7 +60,7 @@ func (p *InfoPlugin) Usage() string {
   info commands`
 }
 
-func (p *InfoPlugin) Execute(_ plugins.CommandContext, args []string) (bool, string) {
+func (p *InfoPlugin) Execute(_ CommandContext, args []string) (bool, string) {
 	if len(args) == 0 {
 		return true, p.getSystemInfo()
 	}
@@ -195,7 +193,7 @@ func (p *InfoPlugin) getVersionInfo() string {
 }
 
 func init() {
-	plugins.RegisterFactory("info", func(pm *plugins.Manager) (plugins.Plugin, error) {
-		return New(pm)
+	RegisterPluginFactory("info", func(pm *PluginManager) (Plugin, error) {
+		return NewInfoPlugin(pm)
 	})
 }

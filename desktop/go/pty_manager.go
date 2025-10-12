@@ -1,4 +1,4 @@
-package pty
+package main
 
 import (
 	"io"
@@ -9,24 +9,24 @@ import (
 	"github.com/aymanbagabas/go-pty"
 )
 
-// Manager orchestrates the pseudo terminal lifecycle.
-type Manager struct {
+// PTYManager orchestrates the pseudo terminal lifecycle.
+type PTYManager struct {
 	pty    pty.Pty
 	cmd    *pty.Cmd
 	output chan []byte
 	closed chan struct{}
 }
 
-// NewManager constructs a PTY manager instance.
-func NewManager() (*Manager, error) {
-	return &Manager{
+// NewPTYManager constructs a PTY manager instance.
+func NewPTYManager() (*PTYManager, error) {
+	return &PTYManager{
 		output: make(chan []byte, 100),
 		closed: make(chan struct{}),
 	}, nil
 }
 
 // Start spawns the underlying shell and begins streaming output.
-func (m *Manager) Start() error {
+func (m *PTYManager) Start() error {
 	var shell string
 	if runtime.GOOS == "windows" {
 		shell = "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe"
@@ -63,7 +63,7 @@ func (m *Manager) Start() error {
 	return nil
 }
 
-func (m *Manager) readOutput() {
+func (m *PTYManager) readOutput() {
 	buf := make([]byte, 4096)
 	for {
 		select {
@@ -93,19 +93,19 @@ func (m *Manager) readOutput() {
 	}
 }
 
-func (m *Manager) waitForExit() {
+func (m *PTYManager) waitForExit() {
 	m.cmd.Wait()
 	close(m.closed)
 }
 
 // Write forwards input to the PTY.
-func (m *Manager) Write(data []byte) error {
+func (m *PTYManager) Write(data []byte) error {
 	_, err := m.pty.Write(data)
 	return err
 }
 
 // Resize adjusts the terminal size.
-func (m *Manager) Resize(cols, rows int) error {
+func (m *PTYManager) Resize(cols, rows int) error {
 	if m.pty != nil {
 		return m.pty.Resize(cols, rows)
 	}
@@ -113,7 +113,7 @@ func (m *Manager) Resize(cols, rows int) error {
 }
 
 // Close shuts down the PTY session.
-func (m *Manager) Close() error {
+func (m *PTYManager) Close() error {
 	if m.pty != nil {
 		select {
 		case <-m.closed:
@@ -129,11 +129,11 @@ func (m *Manager) Close() error {
 }
 
 // Output streams PTY output data.
-func (m *Manager) Output() <-chan []byte {
+func (m *PTYManager) Output() <-chan []byte {
 	return m.output
 }
 
 // Closed signals when the PTY command has terminated.
-func (m *Manager) Closed() <-chan struct{} {
+func (m *PTYManager) Closed() <-chan struct{} {
 	return m.closed
 }

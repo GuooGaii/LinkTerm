@@ -5,7 +5,7 @@
   "terminal": {
     "fontFamily": "\"Cascadia Code\", monospace",
     "fontSize": 15,
-    "theme": "monokai",
+    "theme": "dark",
     "opacity": 1,
     "cursorBlink": true,
     "lineHeight": 1.2
