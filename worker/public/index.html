@@ -208,15 +208,13 @@
                 }
 
                 if (hasTerminal && fitAddon) {
-                    // 等待选项更新后再调整尺寸
-                    setTimeout(() => {
-                        try {
-                            fitAddon.fit();
-                            sendResize();  // 通知后端新的尺寸
-                        } catch (error) {
-                            console.warn('终端自适应失败:', error);
-                        }
-                    }, 100);
+                    // 直接调整尺寸，不需要延迟
+                    try {
+                        fitAddon.fit();
+                        sendResize();  // 通知后端新的尺寸
+                    } catch (error) {
+                        console.warn('终端自适应失败:', error);
+                    }
                 }
             }
 

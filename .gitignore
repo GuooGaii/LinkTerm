@@ -61,3 +61,5 @@ worker/wrangler.toml.local
 # Desktop specific
 desktop/go/terminal
 desktop/go/termconfig
+
+*.json
