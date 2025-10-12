@@ -6,13 +6,23 @@ import (
 	"log"
 	"sort"
 	"sync"
+
+	"terminal-client/plugins"
 )
+
+// PluginInfo 用于对外展示插件列表信息。
+type PluginInfo struct {
+	Name         string   `json:"name"`
+	Description  string   `json:"description"`
+	Version      string   `json:"version"`
+	Dependencies []string `json:"dependencies"`
+	Enabled      bool     `json:"enabled"`
+}
 
 // PluginManager keeps track of all registered plugins and their lifecycle.
 type PluginManager struct {
-	plugins        map[string]Plugin
-	commandPlugins map[string]CommandPlugin
-	enabledPlugins map[string]bool
+	entries        map[string]*plugins.PluginEntry // 插件条目（清单+实例）
+	commandPlugins map[string]plugins.CommandPlugin
 	mu             sync.RWMutex
 	ctx            context.Context
 	cancel         context.CancelFunc
@@ -23,44 +33,44 @@ type PluginManager struct {
 func NewPluginManager() *PluginManager {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &PluginManager{
-		plugins:        make(map[string]Plugin),
-		commandPlugins: make(map[string]CommandPlugin),
-		enabledPlugins: make(map[string]bool),
+		entries:        make(map[string]*plugins.PluginEntry),
+		commandPlugins: make(map[string]plugins.CommandPlugin),
 		ctx:            ctx,
 		cancel:         cancel,
 	}
 }
 
-// Register adds a plugin to the manager.
-func (pm *PluginManager) Register(plugin Plugin) error {
+// Register adds a plugin entry to the manager.
+func (pm *PluginManager) Register(entry *plugins.PluginEntry) error {
 	pm.mu.Lock()
 	defer pm.mu.Unlock()
 
-	name := plugin.Name()
+	name := entry.Manifest.Name
 	if name == "" {
 		return fmt.Errorf("plugin name cannot be empty")
 	}
 
-	if _, exists := pm.plugins[name]; exists {
+	if _, exists := pm.entries[name]; exists {
 		return fmt.Errorf("plugin %s already registered", name)
 	}
 
-	pm.plugins[name] = plugin
-	pm.enabledPlugins[name] = true
+	pm.entries[name] = entry
+	entry.Manifest.Enabled = true
 
-	if cmdPlugin, ok := plugin.(CommandPlugin); ok {
+	// 如果是命令插件，注册到命令映射
+	if cmdPlugin, ok := entry.Plugin.(plugins.CommandPlugin); ok {
 		cmdName := cmdPlugin.CommandName()
 		if cmdName == "" {
-			return NewPluginError(name, "command name cannot be empty", nil)
+			return fmt.Errorf("plugin %s: command name cannot be empty", name)
 		}
 		if _, exists := pm.commandPlugins[cmdName]; exists {
-			return NewPluginError(name, fmt.Sprintf("command %s already registered", cmdName), nil)
+			return fmt.Errorf("plugin %s: command %s already registered", name, cmdName)
 		}
 		pm.commandPlugins[cmdName] = cmdPlugin
 		log.Printf("✅ 已注册命令插件: %s -> %s", name, cmdName)
 	}
 
-	log.Printf("📦 已注册插件: %s v%s - %s", name, plugin.Version(), plugin.Description())
+	log.Printf("📦 已注册插件: %s v%s - %s", name, entry.Manifest.Version, entry.Manifest.Description)
 	return nil
 }
 
@@ -72,10 +82,10 @@ func (pm *PluginManager) InitAll() error {
 	}
 
 	for _, name := range order {
-		plugin := pm.plugins[name]
+		entry := pm.entries[name]
 		log.Printf("⚙️  初始化插件: %s", name)
-		if err := plugin.Init(pm.ctx); err != nil {
-			return NewPluginError(name, "初始化失败", err)
+		if err := entry.Plugin.Init(pm.ctx); err != nil {
+			return fmt.Errorf("plugin %s: init failed: %w", name, err)
 		}
 	}
 
@@ -97,12 +107,12 @@ func (pm *PluginManager) StartAll() error {
 	}
 
 	for _, name := range order {
-		plugin := pm.plugins[name]
+		entry := pm.entries[name]
 		log.Printf("🚀 启动插件: %s", name)
-		if err := plugin.Start(pm.ctx); err != nil {
-			return NewPluginError(name, "启动失败", err)
+		if err := entry.Plugin.Start(pm.ctx); err != nil {
+			return fmt.Errorf("plugin %s: start failed: %w", name, err)
 		}
-		pm.enabledPlugins[name] = true
+		entry.Manifest.Enabled = true
 	}
 
 	pm.started = true
@@ -121,20 +131,20 @@ func (pm *PluginManager) StopAll() {
 	order, err := pm.resolveDependencies()
 	if err != nil {
 		log.Printf("停止插件时解析依赖失败: %v", err)
-		order = make([]string, 0, len(pm.plugins))
-		for name := range pm.plugins {
+		order = make([]string, 0, len(pm.entries))
+		for name := range pm.entries {
 			order = append(order, name)
 		}
 	}
 
 	for i := len(order) - 1; i >= 0; i-- {
 		name := order[i]
-		plugin := pm.plugins[name]
+		entry := pm.entries[name]
 		log.Printf("⛔ 停止插件: %s", name)
-		if err := plugin.Stop(pm.ctx); err != nil {
+		if err := entry.Plugin.Stop(pm.ctx); err != nil {
 			log.Printf("⚠️  停止插件 %s 失败: %v", name, err)
 		}
-		pm.enabledPlugins[name] = false
+		entry.Manifest.Enabled = false
 	}
 
 	pm.started = false
@@ -142,7 +152,7 @@ func (pm *PluginManager) StopAll() {
 }
 
 // GetCommand retrieves a command plugin by name.
-func (pm *PluginManager) GetCommand(name string) (CommandPlugin, bool) {
+func (pm *PluginManager) GetCommand(name string) (plugins.CommandPlugin, bool) {
 	pm.mu.RLock()
 	defer pm.mu.RUnlock()
 
@@ -164,12 +174,12 @@ func (pm *PluginManager) ListCommands() []string {
 	return commands
 }
 
-// GetPlugin returns a plugin by name.
-func (pm *PluginManager) GetPlugin(name string) (Plugin, bool) {
+// GetPlugin returns a plugin entry by name.
+func (pm *PluginManager) GetPlugin(name string) (*plugins.PluginEntry, bool) {
 	pm.mu.RLock()
 	defer pm.mu.RUnlock()
-	plugin, exists := pm.plugins[name]
-	return plugin, exists
+	entry, exists := pm.entries[name]
+	return entry, exists
 }
 
 // ListPlugins collects metadata for registered plugins.
@@ -177,15 +187,14 @@ func (pm *PluginManager) ListPlugins() []PluginInfo {
 	pm.mu.RLock()
 	defer pm.mu.RUnlock()
 
-	metadata := make([]PluginInfo, 0, len(pm.plugins))
-	for _, plugin := range pm.plugins {
-		name := plugin.Name()
+	metadata := make([]PluginInfo, 0, len(pm.entries))
+	for _, entry := range pm.entries {
 		metadata = append(metadata, PluginInfo{
-			Name:         name,
-			Description:  plugin.Description(),
-			Version:      plugin.Version(),
-			Dependencies: plugin.Dependencies(),
-			Enabled:      pm.enabledPlugins[name],
+			Name:         entry.Manifest.Name,
+			Description:  entry.Manifest.Description,
+			Version:      entry.Manifest.Version,
+			Dependencies: entry.Manifest.Dependencies,
+			Enabled:      entry.Manifest.Enabled,
 		})
 	}
 
@@ -210,15 +219,15 @@ func (pm *PluginManager) resolveDependencies() ([]string, error) {
 			return fmt.Errorf("circular dependency detected: %s", name)
 		}
 
-		plugin, exists := pm.plugins[name]
+		entry, exists := pm.entries[name]
 		if !exists {
 			return fmt.Errorf("plugin %s not found", name)
 		}
 
 		visiting[name] = true
 
-		for _, dep := range plugin.Dependencies() {
-			if _, exists := pm.plugins[dep]; !exists {
+		for _, dep := range entry.Manifest.Dependencies {
+			if _, exists := pm.entries[dep]; !exists {
 				return fmt.Errorf("plugin %s depends on missing plugin %s", name, dep)
 			}
 			if err := visit(dep); err != nil {
@@ -232,7 +241,7 @@ func (pm *PluginManager) resolveDependencies() ([]string, error) {
 		return nil
 	}
 
-	for name := range pm.plugins {
+	for name := range pm.entries {
 		if err := visit(name); err != nil {
 			return nil, err
 		}
@@ -247,17 +256,25 @@ func (pm *PluginManager) GetCommandHelp(commandName string) string {
 	defer pm.mu.RUnlock()
 
 	if plugin, exists := pm.commandPlugins[commandName]; exists {
-		return fmt.Sprintf("%s - %s\n\n%s",
-			commandName,
-			plugin.Description(),
-			plugin.Usage())
+		// 查找对应的清单信息
+		for _, entry := range pm.entries {
+			if cmdPlugin, ok := entry.Plugin.(plugins.CommandPlugin); ok {
+				if cmdPlugin.CommandName() == commandName {
+					return fmt.Sprintf("%s - %s\n\n%s",
+						commandName,
+						entry.Manifest.Description,
+						plugin.Usage())
+				}
+			}
+		}
+		return plugin.Usage()
 	}
 
 	return fmt.Sprintf("命令 '%s' 不存在", commandName)
 }
 
 // ExecuteCommand runs a command plugin.
-func (pm *PluginManager) ExecuteCommand(commandName string, ctx CommandContext, args []string) (bool, string) {
+func (pm *PluginManager) ExecuteCommand(commandName string, ctx plugins.CommandContext, args []string) (bool, string) {
 	plugin, exists := pm.GetCommand(commandName)
 	if !exists {
 		return false, fmt.Sprintf("未知命令: %s\n\n可用命令: %v", commandName, pm.ListCommands())

@@ -6,28 +6,22 @@ import (
 	"runtime"
 	"strings"
 
-	"terminal-client/types"
+	"terminal-client/plugins"
 )
 
-const (
-	infoPluginName        = "info"
-	infoPluginVersion     = "1.0.0"
-	infoPluginDescription = "显示系统和插件信息"
-)
+func init() {
+	// 注册插件到全局注册表
+	plugins.RegisterPlugin("info", func(pm interface{}) interface{} {
+		plugin, _ := NewPlugin(pm)
+		return plugin
+	})
+}
 
 // PluginManager 接口定义，避免循环依赖
 type PluginManager interface {
 	ListPlugins() []PluginInfo
 	ListCommands() []string
 	GetCommand(name string) (CommandPlugin, bool)
-}
-
-// CommandContext 接口定义，避免循环依赖（必须与 main 包中的签名完全一致）
-type CommandContext interface {
-	LoadConfig() (*types.Config, error)
-	SaveConfig(*types.Config) error
-	ConfigPath() string
-	NotifyConfigUpdated(*types.TerminalConfig)
 }
 
 // PluginInfo 插件信息结构
@@ -64,22 +58,6 @@ func (p *InfoPlugin) getPluginManager() PluginManager {
 	return nil
 }
 
-func (p *InfoPlugin) Name() string {
-	return infoPluginName
-}
-
-func (p *InfoPlugin) Description() string {
-	return infoPluginDescription
-}
-
-func (p *InfoPlugin) Version() string {
-	return infoPluginVersion
-}
-
-func (p *InfoPlugin) Dependencies() []string {
-	return nil
-}
-
 func (p *InfoPlugin) CommandName() string {
 	return "info"
 }
@@ -99,7 +77,7 @@ func (p *InfoPlugin) Usage() string {
   info commands`
 }
 
-func (p *InfoPlugin) Execute(_ interface{}, args []string) (bool, string) {
+func (p *InfoPlugin) Execute(ctx plugins.CommandContext, args []string) (bool, string) {
 	if len(args) == 0 {
 		return true, p.getSystemInfo()
 	}

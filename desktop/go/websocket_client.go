@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+	"terminal-client/plugins"
 )
 
 const defaultTerminalID = "default"
@@ -24,7 +25,7 @@ type WebSocketClient struct {
 	stopChan      chan struct{}
 	reconnectCh   chan struct{}
 	pluginManager *PluginManager
-	commandCtx    CommandContext
+	commandCtx    plugins.CommandContext
 	lastConfigMod time.Time
 	sessions      map[string]*terminalSession
 }
@@ -50,7 +51,7 @@ func (c *WebSocketClient) SetPluginManager(pm *PluginManager) {
 	c.pluginManager = pm
 }
 
-func (c *WebSocketClient) SetCommandContext(ctx CommandContext) {
+func (c *WebSocketClient) SetCommandContext(ctx plugins.CommandContext) {
 	c.commandCtx = ctx
 }
 

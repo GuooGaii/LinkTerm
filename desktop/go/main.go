@@ -7,9 +7,13 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"syscall"
 
+	"terminal-client/plugins"
+	_ "terminal-client/plugins/info"       // 自动注册 info 插件
+	_ "terminal-client/plugins/termconfig" // 自动注册 termconfig 插件
 	"terminal-client/types"
 )
 
@@ -80,6 +84,59 @@ func handleCLIMode(args []string) bool {
 	}
 
 	return false
+}
+
+// BuildPluginManager 构建插件管理器并自动发现加载插件。
+func BuildPluginManager() (*PluginManager, error) {
+	manager := NewPluginManager()
+
+	// 尝试多个可能的插件目录位置
+	var pluginsDir string
+	var entries map[string]*plugins.PluginEntry
+	var err error
+
+	// 1. 优先尝试当前工作目录（开发环境）
+	if cwd, _ := os.Getwd(); cwd != "" {
+		pluginsDir = filepath.Join(cwd, "plugins")
+		if stat, statErr := os.Stat(pluginsDir); statErr == nil && stat.IsDir() {
+			entries, err = plugins.DiscoverPlugins(pluginsDir)
+			if err == nil && len(entries) > 0 {
+				log.Printf("从工作目录加载插件: %s", pluginsDir)
+			}
+		}
+	}
+
+	// 2. 如果工作目录没找到，尝试可执行文件所在目录（生产环境）
+	if entries == nil || len(entries) == 0 {
+		if exePath, exeErr := os.Executable(); exeErr == nil {
+			exeDir := filepath.Dir(exePath)
+			pluginsDir = filepath.Join(exeDir, "plugins")
+			if stat, statErr := os.Stat(pluginsDir); statErr == nil && stat.IsDir() {
+				entries, err = plugins.DiscoverPlugins(pluginsDir)
+				if err == nil && len(entries) > 0 {
+					log.Printf("从可执行文件目录加载插件: %s", pluginsDir)
+				}
+			}
+		}
+	}
+
+	// 3. 如果都找不到，返回错误
+	if entries == nil || len(entries) == 0 {
+		return nil, fmt.Errorf("未找到插件目录或插件为空")
+	}
+
+	if err != nil {
+		return nil, fmt.Errorf("发现插件失败: %w", err)
+	}
+
+	// 注册所有发现的插件
+	for _, entry := range entries {
+		if err := manager.Register(entry); err != nil {
+			return nil, fmt.Errorf("注册插件 %s 失败: %w", entry.Manifest.Name, err)
+		}
+	}
+
+	return manager, nil
 }
 
 func executePluginCommand(command string, args []string, configPath string) {

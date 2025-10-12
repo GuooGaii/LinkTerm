@@ -11,21 +11,16 @@ import (
 	"strings"
 
 	"github.com/AlecAivazis/survey/v2"
+	"terminal-client/plugins"
 	"terminal-client/types"
 )
 
-const (
-	termconfigPluginName        = "termconfig"
-	termconfigPluginVersion     = "1.0.0"
-	termconfigPluginDescription = "终端配置命令 - 管理终端外观和行为设置"
-)
-
-// CommandContext 接口定义，避免循环依赖
-type CommandContext interface {
-	LoadConfig() (*types.Config, error)
-	SaveConfig(*types.Config) error
-	ConfigPath() string
-	NotifyConfigUpdated(*types.TerminalConfig)
+func init() {
+	// 注册插件到全局注册表
+	plugins.RegisterPlugin("termconfig", func(pm interface{}) interface{} {
+		plugin, _ := NewPlugin(pm)
+		return plugin
+	})
 }
 
 // TermConfigPlugin 管理终端外观和行为设置的命令插件。
@@ -34,22 +29,6 @@ type TermConfigPlugin struct{}
 // NewPlugin 创建 termconfig 插件（导出供插件加载器使用）。
 func NewPlugin(pm interface{}) (interface{}, error) {
 	return &TermConfigPlugin{}, nil
-}
-
-func (p *TermConfigPlugin) Name() string {
-	return termconfigPluginName
-}
-
-func (p *TermConfigPlugin) Description() string {
-	return termconfigPluginDescription
-}
-
-func (p *TermConfigPlugin) Version() string {
-	return termconfigPluginVersion
-}
-
-func (p *TermConfigPlugin) Dependencies() []string {
-	return nil
 }
 
 func (p *TermConfigPlugin) CommandName() string {
@@ -101,7 +80,7 @@ func (p *TermConfigPlugin) Stop(ctx context.Context) error {
 	return nil
 }
 
-func (p *TermConfigPlugin) Execute(ctx interface{}, args []string) (bool, string) {
+func (p *TermConfigPlugin) Execute(ctx plugins.CommandContext, args []string) (bool, string) {
 	if len(args) == 0 {
 		return true, p.Usage()
 	}
@@ -134,7 +113,7 @@ func (p *TermConfigPlugin) Execute(ctx interface{}, args []string) (bool, string
 	}
 }
 
-func (p *TermConfigPlugin) handleFont(ctx interface{}, args []string) (bool, string) {
+func (p *TermConfigPlugin) handleFont(ctx plugins.CommandContext, args []string) (bool, string) {
 	cfg, err := p.loadConfig(ctx)
 	if err != nil {
 		return false, fmt.Sprintf("❌ 加载配置失败: %v", err)
@@ -176,7 +155,7 @@ func (p *TermConfigPlugin) updateFontFamily(cfg *types.Config, font string) stri
 	return fmt.Sprintf("✅ 字体已设置为: %s", font)
 }
 
-func (p *TermConfigPlugin) handleFontSize(ctx interface{}, args []string) (bool, string) {
+func (p *TermConfigPlugin) handleFontSize(ctx plugins.CommandContext, args []string) (bool, string) {
 	cfg, err := p.loadConfig(ctx)
 	if err != nil {
 		return false, fmt.Sprintf("❌ 加载配置失败: %v", err)
@@ -195,7 +174,7 @@ func (p *TermConfigPlugin) handleFontSize(ctx interface{}, args []string) (bool,
 	return p.saveAndPush(ctx, cfg, fmt.Sprintf("✅ 字体大小已设置为: %d", size))
 }
 
-func (p *TermConfigPlugin) handleTheme(ctx interface{}, args []string) (bool, string) {
+func (p *TermConfigPlugin) handleTheme(ctx plugins.CommandContext, args []string) (bool, string) {
 	cfg, err := p.loadConfig(ctx)
 	if err != nil {
 		return false, fmt.Sprintf("❌ 加载配置失败: %v", err)
@@ -233,7 +212,7 @@ func (p *TermConfigPlugin) updateTheme(cfg *types.Config, theme string) string {
 	return fmt.Sprintf("✅ 主题已设置为: %s", theme)
 }
 
-func (p *TermConfigPlugin) handleOpacity(ctx interface{}, args []string) (bool, string) {
+func (p *TermConfigPlugin) handleOpacity(ctx plugins.CommandContext, args []string) (bool, string) {
 	cfg, err := p.loadConfig(ctx)
 	if err != nil {
 		return false, fmt.Sprintf("❌ 加载配置失败: %v", err)
@@ -252,7 +231,7 @@ func (p *TermConfigPlugin) handleOpacity(ctx interface{}, args []string) (bool, 
 	return p.saveAndPush(ctx, cfg, fmt.Sprintf("✅ 透明度已设置为: %.1f", opacity))
 }
 
-func (p *TermConfigPlugin) handleCursor(ctx interface{}, args []string) (bool, string) {
+func (p *TermConfigPlugin) handleCursor(ctx plugins.CommandContext, args []string) (bool, string) {
 	cfg, err := p.loadConfig(ctx)
 	if err != nil {
 		return false, fmt.Sprintf("❌ 加载配置失败: %v", err)
@@ -278,7 +257,7 @@ func (p *TermConfigPlugin) handleCursor(ctx interface{}, args []string) (bool, s
 	}
 }
 
-func (p *TermConfigPlugin) handleLineHeight(ctx interface{}, args []string) (bool, string) {
+func (p *TermConfigPlugin) handleLineHeight(ctx plugins.CommandContext, args []string) (bool, string) {
 	cfg, err := p.loadConfig(ctx)
 	if err != nil {
 		return false, fmt.Sprintf("❌ 加载配置失败: %v", err)
@@ -297,7 +276,7 @@ func (p *TermConfigPlugin) handleLineHeight(ctx interface{}, args []string) (boo
 	return p.saveAndPush(ctx, cfg, fmt.Sprintf("✅ 行高已设置为: %.2f", height))
 }
 
-func (p *TermConfigPlugin) handleList(ctx interface{}) (bool, string) {
+func (p *TermConfigPlugin) handleList(ctx plugins.CommandContext) (bool, string) {
 	cfg, err := p.loadConfig(ctx)
 	if err != nil {
 		return false, fmt.Sprintf("❌ 加载配置失败: %v", err)
@@ -307,7 +286,7 @@ func (p *TermConfigPlugin) handleList(ctx interface{}) (bool, string) {
 	return true, fmt.Sprintf("当前配置:\n%s", string(data))
 }
 
-func (p *TermConfigPlugin) handleReset(ctx interface{}) (bool, string) {
+func (p *TermConfigPlugin) handleReset(ctx plugins.CommandContext) (bool, string) {
 	prompt := &survey.Confirm{
 		Message: "确定要重置为默认配置吗？",
 		Default: false,
@@ -327,15 +306,12 @@ func (p *TermConfigPlugin) handleReset(ctx interface{}) (bool, string) {
 	return p.saveAndPush(ctx, cfg, "✅ 配置已重置为默认值")
 }
 
-func (p *TermConfigPlugin) loadConfig(ctx interface{}) (*types.Config, error) {
+func (p *TermConfigPlugin) loadConfig(ctx plugins.CommandContext) (*types.Config, error) {
 	if ctx == nil {
 		return nil, errors.New("命令上下文不可用")
 	}
 
-	cmdCtx, ok := ctx.(CommandContext)
-	if !ok {
-		return nil, errors.New("上下文类型不匹配")
-	}
+	cmdCtx := ctx
 
 	cfg, err := cmdCtx.LoadConfig()
 	if err != nil {
@@ -351,15 +327,12 @@ func (p *TermConfigPlugin) loadConfig(ctx interface{}) (*types.Config, error) {
 	return cfg, nil
 }
 
-func (p *TermConfigPlugin) saveAndPush(ctx interface{}, cfg *types.Config, message string) (bool, string) {
+func (p *TermConfigPlugin) saveAndPush(ctx plugins.CommandContext, cfg *types.Config, message string) (bool, string) {
 	if ctx == nil {
 		return false, "命令上下文不可用"
 	}
 
-	cmdCtx, ok := ctx.(CommandContext)
-	if !ok {
-		return false, "上下文类型不匹配"
-	}
+	cmdCtx := ctx
 
 	if err := cmdCtx.SaveConfig(cfg); err != nil {
 		return false, fmt.Sprintf("❌ 保存配置失败: %v", err)
