@@ -130,6 +130,12 @@ class SessionManager extends DurableObject {
                             type: "system",
                             data: { cmd: "connected", args: { deviceType: "web" } }
                         }));
+
+                        // 同时通知 Web 端，桌面端已经连接
+                        session.web.send(JSON.stringify({
+                            type: "system",
+                            data: { cmd: "connected", args: { deviceType: "desktop" } }
+                        }));
                     }
                 }
                 break;

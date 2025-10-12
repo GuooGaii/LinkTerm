@@ -6,13 +6,12 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"os"
-	"reflect"
 	"sort"
 	"strconv"
 	"strings"
 
 	"github.com/AlecAivazis/survey/v2"
+	"terminal-client/types"
 )
 
 const (
@@ -23,28 +22,10 @@ const (
 
 // CommandContext 接口定义，避免循环依赖
 type CommandContext interface {
-	LoadConfig() (*Config, error)
-	SaveConfig(*Config) error
+	LoadConfig() (*types.Config, error)
+	SaveConfig(*types.Config) error
 	ConfigPath() string
-	NotifyConfigUpdated(*TerminalConfig)
-}
-
-// Config 配置结构
-type Config struct {
-	ServerURL string          `json:"serverUrl"`
-	WebURL    string          `json:"webUrl"`
-	DeviceID  string          `json:"deviceId"`
-	Terminal  *TerminalConfig `json:"terminal"`
-}
-
-// TerminalConfig 终端配置结构
-type TerminalConfig struct {
-	FontFamily  string  `json:"fontFamily"`
-	FontSize    int     `json:"fontSize"`
-	Theme       string  `json:"theme"`
-	Opacity     float64 `json:"opacity"`
-	CursorBlink bool    `json:"cursorBlink"`
-	LineHeight  float64 `json:"lineHeight"`
+	NotifyConfigUpdated(*types.TerminalConfig)
 }
 
 // TermConfigPlugin 管理终端外观和行为设置的命令插件。
@@ -120,27 +101,6 @@ func (p *TermConfigPlugin) Stop(ctx context.Context) error {
 	return nil
 }
 
-// DefaultTerminal 返回默认终端配置
-func DefaultTerminal() *TerminalConfig {
-	return &TerminalConfig{
-		FontFamily:  "\"Cascadia Code\", monospace",
-		FontSize:    14,
-		Theme:       "dark",
-		Opacity:     1.0,
-		CursorBlink: true,
-		LineHeight:  1.2,
-	}
-}
-
-// CloneTerminal 克隆终端配置
-func CloneTerminal(src *TerminalConfig) *TerminalConfig {
-	if src == nil {
-		return DefaultTerminal()
-	}
-	clone := *src
-	return &clone
-}
-
 func (p *TermConfigPlugin) Execute(ctx interface{}, args []string) (bool, string) {
 	if len(args) == 0 {
 		return true, p.Usage()
@@ -206,12 +166,12 @@ func (p *TermConfigPlugin) handleFont(ctx interface{}, args []string) (bool, str
 	return false, fmt.Sprintf("❌ 未找到字体: %s\n可用字体: %v", font, sortedFonts)
 }
 
-func (p *TermConfigPlugin) updateFontFamily(cfg *Config, font string) string {
+func (p *TermConfigPlugin) updateFontFamily(cfg *types.Config, font string) string {
 	if cfg.Terminal == nil {
-		cfg.Terminal = CloneTerminal(DefaultTerminal())
+		cfg.Terminal = types.CloneTerminal(types.DefaultTerminal())
 	}
 
-	cfg.Terminal.FontFamily = fmt.Sprintf("%s, %s", font, DefaultTerminal().FontFamily)
+	cfg.Terminal.FontFamily = fmt.Sprintf("%s, %s", font, types.DefaultTerminal().FontFamily)
 
 	return fmt.Sprintf("✅ 字体已设置为: %s", font)
 }
@@ -241,7 +201,7 @@ func (p *TermConfigPlugin) handleTheme(ctx interface{}, args []string) (bool, st
 		return false, fmt.Sprintf("❌ 加载配置失败: %v", err)
 	}
 
-	themes := []string{"light", "dark", "dracula", "nord", "monokai"}
+	themes := types.AvailableThemes()
 	if len(args) == 0 {
 		choice := ""
 		prompt := &survey.Select{
@@ -257,18 +217,16 @@ func (p *TermConfigPlugin) handleTheme(ctx interface{}, args []string) (bool, st
 	}
 
 	theme := strings.ToLower(args[0])
-	for _, candidate := range themes {
-		if candidate == theme {
-			return p.saveAndPush(ctx, cfg, p.updateTheme(cfg, candidate))
-		}
+	if types.HasTheme(theme) {
+		return p.saveAndPush(ctx, cfg, p.updateTheme(cfg, theme))
 	}
 
 	return false, fmt.Sprintf("❌ 未找到主题: %s\n可用主题: %v", theme, themes)
 }
 
-func (p *TermConfigPlugin) updateTheme(cfg *Config, theme string) string {
+func (p *TermConfigPlugin) updateTheme(cfg *types.Config, theme string) string {
 	if cfg.Terminal == nil {
-		cfg.Terminal = CloneTerminal(DefaultTerminal())
+		cfg.Terminal = types.CloneTerminal(types.DefaultTerminal())
 	}
 
 	cfg.Terminal.Theme = theme
@@ -365,138 +323,50 @@ func (p *TermConfigPlugin) handleReset(ctx interface{}) (bool, string) {
 		return false, fmt.Sprintf("❌ 加载配置失败: %v", err)
 	}
 
-	cfg.Terminal = CloneTerminal(DefaultTerminal())
+	cfg.Terminal = types.CloneTerminal(types.DefaultTerminal())
 	return p.saveAndPush(ctx, cfg, "✅ 配置已重置为默认值")
 }
 
-func (p *TermConfigPlugin) loadConfig(ctx interface{}) (*Config, error) {
+func (p *TermConfigPlugin) loadConfig(ctx interface{}) (*types.Config, error) {
 	if ctx == nil {
 		return nil, errors.New("命令上下文不可用")
 	}
 
-	// 使用鸭子类型 - 查找有 LoadConfig 方法的类型
-	// 使用反射风格的接口检查，因为返回类型可能不同
-	type configLoaderAny interface {
-		LoadConfig() (interface{}, error)
+	cmdCtx, ok := ctx.(CommandContext)
+	if !ok {
+		return nil, errors.New("上下文类型不匹配")
 	}
 
-	// 尝试直接调用 LoadConfig
-	val := reflect.ValueOf(ctx)
-	method := val.MethodByName("LoadConfig")
-	if !method.IsValid() {
-		return nil, errors.New("上下文不支持配置加载")
-	}
-
-	results := method.Call(nil)
-	if len(results) != 2 {
-		return nil, errors.New("LoadConfig 返回值格式不正确")
-	}
-
-	// 检查错误
-	if !results[1].IsNil() {
-		err := results[1].Interface().(error)
-		if os.IsNotExist(err) {
-			return &Config{
-				Terminal: CloneTerminal(DefaultTerminal()),
-			}, nil
-		}
-		return nil, err
-	}
-
-	// 转换配置
-	cfgInterface := results[0].Interface()
-	if cfgInterface == nil {
-		return &Config{
-			Terminal: CloneTerminal(DefaultTerminal()),
+	cfg, err := cmdCtx.LoadConfig()
+	if err != nil {
+		return &types.Config{
+			Terminal: types.CloneTerminal(types.DefaultTerminal()),
 		}, nil
 	}
 
-	// 使用类型断言或 JSON 序列化来转换
-	if cfg, ok := cfgInterface.(*Config); ok {
-		if cfg.Terminal == nil {
-			cfg.Terminal = CloneTerminal(DefaultTerminal())
-		}
-		return cfg, nil
-	}
-
-	// 尝试通过 JSON 转换
-	jsonData, err := json.Marshal(cfgInterface)
-	if err != nil {
-		return nil, fmt.Errorf("配置类型转换失败: %v", err)
-	}
-
-	var cfg Config
-	if err := json.Unmarshal(jsonData, &cfg); err != nil {
-		return nil, fmt.Errorf("配置解析失败: %v", err)
-	}
-
 	if cfg.Terminal == nil {
-		cfg.Terminal = CloneTerminal(DefaultTerminal())
+		cfg.Terminal = types.CloneTerminal(types.DefaultTerminal())
 	}
-	return &cfg, nil
+
+	return cfg, nil
 }
 
-func (p *TermConfigPlugin) saveAndPush(ctx interface{}, cfg *Config, message string) (bool, string) {
+func (p *TermConfigPlugin) saveAndPush(ctx interface{}, cfg *types.Config, message string) (bool, string) {
 	if ctx == nil {
 		return false, "命令上下文不可用"
 	}
 
-	// 使用反射调用 SaveConfig
-	val := reflect.ValueOf(ctx)
-	saveMethod := val.MethodByName("SaveConfig")
-	if !saveMethod.IsValid() {
-		return false, "上下文不支持配置保存"
+	cmdCtx, ok := ctx.(CommandContext)
+	if !ok {
+		return false, "上下文类型不匹配"
 	}
 
-	// 需要将 termconfig.Config 转换为 main.Config
-	// 使用 JSON 序列化/反序列化来进行类型转换
-	jsonData, err := json.Marshal(cfg)
-	if err != nil {
-		return false, fmt.Sprintf("❌ 配置序列化失败: %v", err)
-	}
-
-	// 获取 SaveConfig 方法的参数类型
-	saveMethodType := saveMethod.Type()
-	if saveMethodType.NumIn() != 1 {
-		return false, "SaveConfig 方法签名不正确"
-	}
-
-	// 创建目标类型的实例
-	paramType := saveMethodType.In(0)
-	if paramType.Kind() != reflect.Ptr {
-		return false, "SaveConfig 参数类型必须是指针"
-	}
-
-	// 创建新的配置实例并反序列化
-	newCfgPtr := reflect.New(paramType.Elem())
-	if err := json.Unmarshal(jsonData, newCfgPtr.Interface()); err != nil {
-		return false, fmt.Sprintf("❌ 配置反序列化失败: %v", err)
-	}
-
-	// 调用 SaveConfig
-	results := saveMethod.Call([]reflect.Value{newCfgPtr})
-	if len(results) > 0 && !results[0].IsNil() {
-		err := results[0].Interface().(error)
+	if err := cmdCtx.SaveConfig(cfg); err != nil {
 		return false, fmt.Sprintf("❌ 保存配置失败: %v", err)
 	}
 
-	// 尝试通知配置更新
 	if cfg.Terminal != nil {
-		notifyMethod := val.MethodByName("NotifyConfigUpdated")
-		if notifyMethod.IsValid() {
-			// 同样需要类型转换
-			terminalJSON, _ := json.Marshal(cfg.Terminal)
-			notifyMethodType := notifyMethod.Type()
-			if notifyMethodType.NumIn() == 1 {
-				terminalParamType := notifyMethodType.In(0)
-				if terminalParamType.Kind() == reflect.Ptr {
-					newTerminalPtr := reflect.New(terminalParamType.Elem())
-					if err := json.Unmarshal(terminalJSON, newTerminalPtr.Interface()); err == nil {
-						notifyMethod.Call([]reflect.Value{newTerminalPtr})
-					}
-				}
-			}
-		}
+		cmdCtx.NotifyConfigUpdated(cfg.Terminal)
 	}
 
 	return true, message

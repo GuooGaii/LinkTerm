@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"runtime"
 	"strings"
+
+	"terminal-client/types"
 )
 
 const (
@@ -22,28 +24,10 @@ type PluginManager interface {
 
 // CommandContext 接口定义，避免循环依赖（必须与 main 包中的签名完全一致）
 type CommandContext interface {
-	LoadConfig() (*Config, error)
-	SaveConfig(*Config) error
+	LoadConfig() (*types.Config, error)
+	SaveConfig(*types.Config) error
 	ConfigPath() string
-	NotifyConfigUpdated(*TerminalConfig)
-}
-
-// Config 配置结构（简化定义）
-type Config struct {
-	ServerURL string          `json:"serverUrl"`
-	WebURL    string          `json:"webUrl"`
-	DeviceID  string          `json:"deviceId"`
-	Terminal  *TerminalConfig `json:"terminal"`
-}
-
-// TerminalConfig 终端配置结构
-type TerminalConfig struct {
-	FontFamily  string  `json:"fontFamily"`
-	FontSize    int     `json:"fontSize"`
-	Theme       string  `json:"theme"`
-	Opacity     float64 `json:"opacity"`
-	CursorBlink bool    `json:"cursorBlink"`
-	LineHeight  float64 `json:"lineHeight"`
+	NotifyConfigUpdated(*types.TerminalConfig)
 }
 
 // PluginInfo 插件信息结构

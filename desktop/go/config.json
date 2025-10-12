@@ -3,7 +3,7 @@
   "webUrl": "https://terminal.guoogaii.workers.dev",
   "deviceId": "8409069c-abc3-4f15-83d7-c9328af71b78",
   "terminal": {
-    "fontFamily": "Cascadia Code, \"Cascadia Code\", monospace",
+    "fontFamily": "Cascadia Code, \"Cascadia Code\", \"JetBrains Mono\", \"Fira Code\", monospace",
     "fontSize": 15,
     "theme": "dark",
     "opacity": 1,

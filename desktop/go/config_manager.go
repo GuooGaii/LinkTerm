@@ -6,6 +6,7 @@ import (
 	"os"
 
 	"github.com/google/uuid"
+	"terminal-client/types"
 )
 
 // ConfigManager provides helpers to work with the configuration file on disk.
@@ -24,18 +25,18 @@ func (m *ConfigManager) Path() string {
 }
 
 // Load reads configuration from disk and normalises terminal settings.
-func (m *ConfigManager) Load() (*Config, error) {
+func (m *ConfigManager) Load() (*types.Config, error) {
 	data, err := os.ReadFile(m.path)
 	if err != nil {
 		return nil, err
 	}
 
-	var cfg Config
+	var cfg types.Config
 	if err := json.Unmarshal(data, &cfg); err != nil {
 		return nil, err
 	}
 
-	cfg.Terminal = NormalizeTerminal(cfg.Terminal)
+	cfg.Terminal = types.NormalizeTerminal(cfg.Terminal)
 
 	if cfg.ServerURL == "" || cfg.WebURL == "" {
 		return nil, fmt.Errorf("配置不完整：缺少服务器地址")
@@ -51,9 +52,9 @@ func (m *ConfigManager) Load() (*Config, error) {
 }
 
 // Save writes configuration back to disk ensuring defaults are present.
-func (m *ConfigManager) Save(cfg *Config) error {
+func (m *ConfigManager) Save(cfg *types.Config) error {
 	if cfg.Terminal == nil {
-		cfg.Terminal = CloneTerminal(DefaultTerminal())
+		cfg.Terminal = types.CloneTerminal(types.DefaultTerminal())
 	}
 
 	data, err := json.MarshalIndent(cfg, "", "  ")
@@ -66,7 +67,7 @@ func (m *ConfigManager) Save(cfg *Config) error {
 
 // EnsureDeviceID guarantees the configuration carries a device identifier.
 // It returns true when the configuration was mutated.
-func EnsureDeviceID(cfg *Config) bool {
+func EnsureDeviceID(cfg *types.Config) bool {
 	if cfg.DeviceID != "" {
 		return false
 	}
@@ -76,7 +77,7 @@ func EnsureDeviceID(cfg *Config) bool {
 
 // CreateConfigWithDeviceID builds a config using supplied endpoints and an optional
 // existing configuration for reusing the DeviceID.
-func CreateConfigWithDeviceID(existing *Config, serverURL, webURL string) *Config {
+func CreateConfigWithDeviceID(existing *types.Config, serverURL, webURL string) *types.Config {
 	deviceID := ""
 	if existing != nil {
 		deviceID = existing.DeviceID
@@ -85,10 +86,10 @@ func CreateConfigWithDeviceID(existing *Config, serverURL, webURL string) *Confi
 		deviceID = uuid.New().String()
 	}
 
-	return &Config{
+	return &types.Config{
 		ServerURL: serverURL,
 		WebURL:    webURL,
 		DeviceID:  deviceID,
-		Terminal:  CloneTerminal(DefaultTerminal()),
+		Terminal:  types.CloneTerminal(types.DefaultTerminal()),
 	}
 }

@@ -9,7 +9,13 @@ import (
 	"os/signal"
 	"strings"
 	"syscall"
+
+	"terminal-client/types"
 )
+
+// 为了方便在 main 包中使用，创建类型别名
+type Config = types.Config
+type TerminalConfig = types.TerminalConfig
 
 func main() {
 	if handleCLIMode(os.Args) {

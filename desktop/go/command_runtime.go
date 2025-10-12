@@ -2,11 +2,12 @@ package main
 
 import (
 	"fmt"
+	"terminal-client/types"
 )
 
 // ConfigNotifier defines a callback for configuration updates.
 type ConfigNotifier interface {
-	NotifyConfigUpdated(*TerminalConfig)
+	NotifyConfigUpdated(*types.TerminalConfig)
 }
 
 // CommandRuntime implements CommandContext from plugins.
@@ -23,14 +24,14 @@ func NewCommandRuntime(manager *ConfigManager, notifier ConfigNotifier) *Command
 	}
 }
 
-func (r *CommandRuntime) LoadConfig() (*Config, error) {
+func (r *CommandRuntime) LoadConfig() (*types.Config, error) {
 	if r.manager == nil {
 		return nil, fmt.Errorf("config manager unavailable")
 	}
 	return r.manager.Load()
 }
 
-func (r *CommandRuntime) SaveConfig(cfg *Config) error {
+func (r *CommandRuntime) SaveConfig(cfg *types.Config) error {
 	if r.manager == nil {
 		return fmt.Errorf("config manager unavailable")
 	}
@@ -44,7 +45,7 @@ func (r *CommandRuntime) ConfigPath() string {
 	return r.manager.Path()
 }
 
-func (r *CommandRuntime) NotifyConfigUpdated(cfg *TerminalConfig) {
+func (r *CommandRuntime) NotifyConfigUpdated(cfg *types.TerminalConfig) {
 	if r.notifier != nil {
 		r.notifier.NotifyConfigUpdated(cfg)
 	}
