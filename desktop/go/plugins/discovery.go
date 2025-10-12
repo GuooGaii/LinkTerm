@@ -22,7 +22,7 @@ type Manifest struct {
 // PluginEntry 包含插件的清单和实例。
 type PluginEntry struct {
 	Manifest Manifest
-	Plugin   Plugin
+	Plugin   CommandPlugin
 }
 
 // DiscoverPlugins 扫描 plugins 目录，自动发现并加载所有插件。
@@ -101,7 +101,7 @@ func loadManifest(path string) (*Manifest, error) {
 }
 
 // loadPlugin 根据清单信息加载插件实例。
-func loadPlugin(packageName string, manifest *Manifest) (Plugin, error) {
+func loadPlugin(packageName string, manifest *Manifest) (CommandPlugin, error) {
 	// 根据包名获取插件工厂函数
 	// 这里使用约定：每个插件包必须导出 NewPlugin 函数
 	factory := getPluginFactory(packageName)
@@ -115,10 +115,10 @@ func loadPlugin(packageName string, manifest *Manifest) (Plugin, error) {
 		return nil, fmt.Errorf("插件 %s 工厂函数返回 nil", manifest.Name)
 	}
 
-	// 类型断言获取 Plugin 接口
-	plugin, ok := pluginInterface.(Plugin)
+	// 类型断言获取 CommandPlugin 接口
+	plugin, ok := pluginInterface.(CommandPlugin)
 	if !ok {
-		return nil, fmt.Errorf("插件 %s 未实现 Plugin 接口", manifest.Name)
+		return nil, fmt.Errorf("插件 %s 未实现 CommandPlugin 接口", manifest.Name)
 	}
 
 	return plugin, nil
@@ -198,10 +198,10 @@ func ResolvePluginDependencies(entries map[string]*PluginEntry) ([]string, error
 func validatePluginInterface(plugin interface{}) error {
 	pluginType := reflect.TypeOf(plugin)
 
-	// 检查是否实现了 Plugin 接口
-	pluginInterface := reflect.TypeOf((*Plugin)(nil)).Elem()
+	// 检查是否实现了 CommandPlugin 接口
+	pluginInterface := reflect.TypeOf((*CommandPlugin)(nil)).Elem()
 	if !pluginType.Implements(pluginInterface) {
-		return fmt.Errorf("插件未实现 Plugin 接口")
+		return fmt.Errorf("插件未实现 CommandPlugin 接口")
 	}
 
 	return nil

@@ -1,7 +1,6 @@
 package info
 
 import (
-	"context"
 	"fmt"
 	"runtime"
 	"strings"
@@ -96,18 +95,6 @@ func (p *InfoPlugin) Execute(ctx plugins.CommandContext, args []string) (bool, s
 
 func (p *InfoPlugin) SubCommands() []string {
 	return []string{"plugins", "commands", "version"}
-}
-
-func (p *InfoPlugin) Init(ctx context.Context) error {
-	return nil
-}
-
-func (p *InfoPlugin) Start(ctx context.Context) error {
-	return nil
-}
-
-func (p *InfoPlugin) Stop(ctx context.Context) error {
-	return nil
 }
 
 func (p *InfoPlugin) getSystemInfo() string {

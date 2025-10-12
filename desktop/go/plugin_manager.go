@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"log"
 	"sort"
@@ -19,24 +18,18 @@ type PluginInfo struct {
 	Enabled      bool     `json:"enabled"`
 }
 
-// PluginManager keeps track of all registered plugins and their lifecycle.
+// PluginManager keeps track of all registered plugins.
 type PluginManager struct {
 	entries        map[string]*plugins.PluginEntry // 插件条目（清单+实例）
 	commandPlugins map[string]plugins.CommandPlugin
 	mu             sync.RWMutex
-	ctx            context.Context
-	cancel         context.CancelFunc
-	started        bool
 }
 
 // NewPluginManager creates a fresh plugin manager.
 func NewPluginManager() *PluginManager {
-	ctx, cancel := context.WithCancel(context.Background())
 	return &PluginManager{
 		entries:        make(map[string]*plugins.PluginEntry),
 		commandPlugins: make(map[string]plugins.CommandPlugin),
-		ctx:            ctx,
-		cancel:         cancel,
 	}
 }
 
@@ -57,99 +50,21 @@ func (pm *PluginManager) Register(entry *plugins.PluginEntry) error {
 	pm.entries[name] = entry
 	entry.Manifest.Enabled = true
 
-	// 如果是命令插件，注册到命令映射
-	if cmdPlugin, ok := entry.Plugin.(plugins.CommandPlugin); ok {
-		cmdName := cmdPlugin.CommandName()
-		if cmdName == "" {
-			return fmt.Errorf("plugin %s: command name cannot be empty", name)
-		}
-		if _, exists := pm.commandPlugins[cmdName]; exists {
-			return fmt.Errorf("plugin %s: command %s already registered", name, cmdName)
-		}
-		pm.commandPlugins[cmdName] = cmdPlugin
-		log.Printf("✅ 已注册命令插件: %s -> %s", name, cmdName)
+	// 注册命令插件
+	cmdName := entry.Plugin.CommandName()
+	if cmdName == "" {
+		return fmt.Errorf("plugin %s: command name cannot be empty", name)
 	}
+	if _, exists := pm.commandPlugins[cmdName]; exists {
+		return fmt.Errorf("plugin %s: command %s already registered", name, cmdName)
+	}
+	pm.commandPlugins[cmdName] = entry.Plugin
+	log.Printf("✅ 已注册命令插件: %s -> %s", name, cmdName)
 
 	log.Printf("📦 已注册插件: %s v%s - %s", name, entry.Manifest.Version, entry.Manifest.Description)
 	return nil
 }
 
-// InitAll initialises plugins respecting dependencies.
-func (pm *PluginManager) InitAll() error {
-	order, err := pm.resolveDependencies()
-	if err != nil {
-		return err
-	}
-
-	for _, name := range order {
-		entry := pm.entries[name]
-		log.Printf("⚙️  初始化插件: %s", name)
-		if err := entry.Plugin.Init(pm.ctx); err != nil {
-			return fmt.Errorf("plugin %s: init failed: %w", name, err)
-		}
-	}
-
-	return nil
-}
-
-// StartAll starts all plugins.
-func (pm *PluginManager) StartAll() error {
-	pm.mu.Lock()
-	defer pm.mu.Unlock()
-
-	if pm.started {
-		return nil
-	}
-
-	order, err := pm.resolveDependencies()
-	if err != nil {
-		return err
-	}
-
-	for _, name := range order {
-		entry := pm.entries[name]
-		log.Printf("🚀 启动插件: %s", name)
-		if err := entry.Plugin.Start(pm.ctx); err != nil {
-			return fmt.Errorf("plugin %s: start failed: %w", name, err)
-		}
-		entry.Manifest.Enabled = true
-	}
-
-	pm.started = true
-	return nil
-}
-
-// StopAll stops all plugins in reverse order.
-func (pm *PluginManager) StopAll() {
-	pm.mu.Lock()
-	defer pm.mu.Unlock()
-
-	if !pm.started {
-		return
-	}
-
-	order, err := pm.resolveDependencies()
-	if err != nil {
-		log.Printf("停止插件时解析依赖失败: %v", err)
-		order = make([]string, 0, len(pm.entries))
-		for name := range pm.entries {
-			order = append(order, name)
-		}
-	}
-
-	for i := len(order) - 1; i >= 0; i-- {
-		name := order[i]
-		entry := pm.entries[name]
-		log.Printf("⛔ 停止插件: %s", name)
-		if err := entry.Plugin.Stop(pm.ctx); err != nil {
-			log.Printf("⚠️  停止插件 %s 失败: %v", name, err)
-		}
-		entry.Manifest.Enabled = false
-	}
-
-	pm.started = false
-	pm.cancel()
-}
 
 // GetCommand retrieves a command plugin by name.
 func (pm *PluginManager) GetCommand(name string) (plugins.CommandPlugin, bool) {
@@ -258,13 +173,11 @@ func (pm *PluginManager) GetCommandHelp(commandName string) string {
 	if plugin, exists := pm.commandPlugins[commandName]; exists {
 		// 查找对应的清单信息
 		for _, entry := range pm.entries {
-			if cmdPlugin, ok := entry.Plugin.(plugins.CommandPlugin); ok {
-				if cmdPlugin.CommandName() == commandName {
-					return fmt.Sprintf("%s - %s\n\n%s",
-						commandName,
-						entry.Manifest.Description,
-						plugin.Usage())
-				}
+			if entry.Plugin.CommandName() == commandName {
+				return fmt.Sprintf("%s - %s\n\n%s",
+					commandName,
+					entry.Manifest.Description,
+					plugin.Usage())
 			}
 		}
 		return plugin.Usage()

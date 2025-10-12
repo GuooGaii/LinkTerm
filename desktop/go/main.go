@@ -152,11 +152,6 @@ func executePluginCommand(command string, args []string, configPath string) {
 		os.Exit(1)
 	}
 
-	if err := pluginManager.InitAll(); err != nil {
-		fmt.Fprintf(os.Stderr, "初始化插件失败: %v\n", err)
-		os.Exit(1)
-	}
-
 	ctx := NewCommandRuntime(cfgManager, nil)
 	success, output := pluginManager.ExecuteCommand(command, ctx, args)
 	fmt.Print(output)
@@ -183,14 +178,6 @@ func runServer(cfgManager *ConfigManager, cfg *Config) {
 		log.Fatalf("构建插件管理器失败: %v", err)
 	}
 
-	if err := pluginManager.InitAll(); err != nil {
-		log.Fatalf("初始化插件失败: %v", err)
-	}
-
-	if err := pluginManager.StartAll(); err != nil {
-		log.Fatalf("启动插件失败: %v", err)
-	}
-
 	var registrar *CommandRegistrar
 	commands := pluginManager.ListCommands()
 	if len(commands) > 0 {
@@ -211,7 +198,6 @@ func runServer(cfgManager *ConfigManager, cfg *Config) {
 		if registrar != nil {
 			registrar.Unregister()
 		}
-		pluginManager.StopAll()
 		log.Fatalf("启动客户端失败: %v", err)
 	}
 
@@ -228,6 +214,5 @@ func runServer(cfgManager *ConfigManager, cfg *Config) {
 		registrar.Unregister()
 	}
 
-	pluginManager.StopAll()
 	client.Stop()
 }

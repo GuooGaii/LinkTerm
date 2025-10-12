@@ -1,8 +1,6 @@
 package plugins
 
 import (
-	"context"
-
 	"terminal-client/types"
 )
 
@@ -14,17 +12,8 @@ type CommandContext interface {
 	NotifyConfigUpdated(*types.TerminalConfig)
 }
 
-// Plugin 描述插件公共生命周期。
-type Plugin interface {
-	Init(context.Context) error
-	Start(context.Context) error
-	Stop(context.Context) error
-}
-
-// CommandPlugin 描述命令型插件需要实现的额外能力。
+// CommandPlugin 描述命令型插件需要实现的能力。
 type CommandPlugin interface {
-	Plugin
-
 	CommandName() string
 	Usage() string
 	Execute(CommandContext, []string) (bool, string)

@@ -1,11 +1,9 @@
 package termconfig
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
 	"sort"
 	"strconv"
 	"strings"
@@ -63,21 +61,6 @@ func (p *TermConfigPlugin) Usage() string {
 
 func (p *TermConfigPlugin) SubCommands() []string {
 	return []string{"font", "font-size", "theme", "opacity", "cursor", "line-height", "list", "reset"}
-}
-
-func (p *TermConfigPlugin) Init(ctx context.Context) error {
-	log.Printf("   初始化 termconfig 插件")
-	return nil
-}
-
-func (p *TermConfigPlugin) Start(ctx context.Context) error {
-	log.Printf("   启动 termconfig 插件")
-	return nil
-}
-
-func (p *TermConfigPlugin) Stop(ctx context.Context) error {
-	log.Printf("   停止 termconfig 插件")
-	return nil
 }
 
 func (p *TermConfigPlugin) Execute(ctx plugins.CommandContext, args []string) (bool, string) {
