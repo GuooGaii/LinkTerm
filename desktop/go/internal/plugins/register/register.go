@@ -1,9 +1,6 @@
 package register
 
-import (
-	_ "terminal-client/internal/plugins/info"
-	_ "terminal-client/internal/plugins/termconfig"
-)
+//go:generate go run ./generate
 
-// Register ensures all statically linked plugins execute their init logic.
+// Register ensures all statically linked plugins execute其 init 逻辑（自动生成的空白导入会触发注册）.
 func Register() {}
