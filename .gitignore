@@ -1,0 +1,63 @@
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+*.log
+
+# Build output
+dist/
+build/
+out/
+*.exe
+
+# IDE and editor files
+.vscode/
+.idea/
+.claude/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Test files
+coverage/
+*.test.exe
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Go build files
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test binary, built with `go test -c`
+*.test
+
+# Output of the go coverage tool
+*.out
+
+# Go workspace file
+go.work
+go.work.sum
+
+# Dependency directories
+vendor/
+
+# Worker/Wrangler specific
+worker/.wrangler/
+worker/wrangler.toml.local
+
+# Desktop specific
+desktop/go/terminal
+desktop/go/termconfig

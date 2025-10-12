@@ -1,0 +1,27 @@
+# HTMX版本的Wrangler配置
+# For more details on how to configure Wrangler, refer to:
+# https://developers.cloudflare.com/workers/wrangler/configuration/
+
+name = "terminal-htmx"
+main = "src/index-htmx.js"
+compatibility_date = "2025-09-12"
+
+[assets]
+directory = "./public"
+binding = "ASSETS"
+
+[[durable_objects.bindings]]
+class_name = "TerminalSessionManager"
+name = "TERMINAL_SESSION_MANAGER"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["TerminalSessionManager"]
+
+[observability]
+enabled = true
+
+# Uncomment and fill in your custom domain if needed
+# [[routes]]
+# pattern = "terminal.chatnext.ai"
+# custom_domain = true
