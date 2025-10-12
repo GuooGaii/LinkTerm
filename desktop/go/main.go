@@ -80,7 +80,7 @@ func executePluginCommand(command string, args []string, configPath string) {
 	cfgManager := NewConfigManager(configPath)
 
 	prevOutput := log.Writer()
-	log.SetOutput(io.Discard)
+	log.SetOutput(io.Discard) // 禁用日志输出
 	defer log.SetOutput(prevOutput)
 
 	pluginManager, err := BuildPluginManager()

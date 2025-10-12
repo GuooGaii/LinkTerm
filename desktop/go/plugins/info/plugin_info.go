@@ -1,4 +1,4 @@
-package main
+package info
 
 import (
 	"context"
@@ -13,16 +13,71 @@ const (
 	infoPluginDescription = "显示系统和插件信息"
 )
 
-// InfoPlugin exposes runtime and plugin details.
-type InfoPlugin struct {
-	pluginManager *PluginManager
+// PluginManager 接口定义，避免循环依赖
+type PluginManager interface {
+	ListPlugins() []PluginInfo
+	ListCommands() []string
+	GetCommand(name string) (CommandPlugin, bool)
 }
 
-// NewInfoPlugin constructs the info command plugin.
-func NewInfoPlugin(pm *PluginManager) (*InfoPlugin, error) {
+// CommandContext 接口定义，避免循环依赖（必须与 main 包中的签名完全一致）
+type CommandContext interface {
+	LoadConfig() (*Config, error)
+	SaveConfig(*Config) error
+	ConfigPath() string
+	NotifyConfigUpdated(*TerminalConfig)
+}
+
+// Config 配置结构（简化定义）
+type Config struct {
+	ServerURL string          `json:"serverUrl"`
+	WebURL    string          `json:"webUrl"`
+	DeviceID  string          `json:"deviceId"`
+	Terminal  *TerminalConfig `json:"terminal"`
+}
+
+// TerminalConfig 终端配置结构
+type TerminalConfig struct {
+	FontFamily  string  `json:"fontFamily"`
+	FontSize    int     `json:"fontSize"`
+	Theme       string  `json:"theme"`
+	Opacity     float64 `json:"opacity"`
+	CursorBlink bool    `json:"cursorBlink"`
+	LineHeight  float64 `json:"lineHeight"`
+}
+
+// PluginInfo 插件信息结构
+type PluginInfo struct {
+	Name         string   `json:"name"`
+	Description  string   `json:"description"`
+	Version      string   `json:"version"`
+	Dependencies []string `json:"dependencies"`
+	Enabled      bool     `json:"enabled"`
+}
+
+// CommandPlugin 命令插件接口
+type CommandPlugin interface {
+	Description() string
+}
+
+// InfoPlugin exposes runtime and plugin details.
+type InfoPlugin struct {
+	pluginManager interface{}
+}
+
+// NewPlugin constructs the info command plugin (exported for plugin loader).
+func NewPlugin(pm interface{}) (interface{}, error) {
 	return &InfoPlugin{
 		pluginManager: pm,
 	}, nil
+}
+
+// getPluginManager 返回类型安全的插件管理器
+func (p *InfoPlugin) getPluginManager() PluginManager {
+	if pm, ok := p.pluginManager.(PluginManager); ok {
+		return pm
+	}
+	return nil
 }
 
 func (p *InfoPlugin) Name() string {
@@ -60,7 +115,7 @@ func (p *InfoPlugin) Usage() string {
   info commands`
 }
 
-func (p *InfoPlugin) Execute(_ CommandContext, args []string) (bool, string) {
+func (p *InfoPlugin) Execute(_ interface{}, args []string) (bool, string) {
 	if len(args) == 0 {
 		return true, p.getSystemInfo()
 	}
@@ -102,9 +157,9 @@ func (p *InfoPlugin) getSystemInfo() string {
 	sb.WriteString(fmt.Sprintf("CPU 核心:   %d\n", runtime.NumCPU()))
 	sb.WriteString(fmt.Sprintf("Goroutines: %d\n", runtime.NumGoroutine()))
 
-	if p.pluginManager != nil {
+	if pm := p.getPluginManager(); pm != nil {
 		enabled := make([]string, 0)
-		for _, metadata := range p.pluginManager.ListPlugins() {
+		for _, metadata := range pm.ListPlugins() {
 			if metadata.Enabled {
 				enabled = append(enabled, fmt.Sprintf("📦 %s (v%s)", metadata.Name, metadata.Version))
 			}
@@ -125,11 +180,12 @@ func (p *InfoPlugin) getSystemInfo() string {
 }
 
 func (p *InfoPlugin) listPlugins() string {
-	if p.pluginManager == nil {
+	pm := p.getPluginManager()
+	if pm == nil {
 		return "插件管理器不可用"
 	}
 
-	pluginInfos := p.pluginManager.ListPlugins()
+	pluginInfos := pm.ListPlugins()
 	if len(pluginInfos) == 0 {
 		return "没有已加载的插件"
 	}
@@ -161,11 +217,12 @@ func (p *InfoPlugin) listPlugins() string {
 }
 
 func (p *InfoPlugin) listCommands() string {
-	if p.pluginManager == nil {
+	pm := p.getPluginManager()
+	if pm == nil {
 		return "插件管理器不可用"
 	}
 
-	commands := p.pluginManager.ListCommands()
+	commands := pm.ListCommands()
 	if len(commands) == 0 {
 		return "没有可用的命令"
 	}
@@ -174,7 +231,7 @@ func (p *InfoPlugin) listCommands() string {
 	sb.WriteString(fmt.Sprintf("=== 可用命令 (%d) ===\n\n", len(commands)))
 
 	for _, cmd := range commands {
-		if plugin, exists := p.pluginManager.GetCommand(cmd); exists {
+		if plugin, exists := pm.GetCommand(cmd); exists {
 			sb.WriteString(fmt.Sprintf("  %s - %s\n", cmd, plugin.Description()))
 		}
 	}
@@ -190,10 +247,4 @@ func (p *InfoPlugin) getVersionInfo() string {
 
 项目地址: https://chatnext.ai/terminal
 微信: agentready`
-}
-
-func init() {
-	RegisterPluginFactory("info", func(pm *PluginManager) (Plugin, error) {
-		return NewInfoPlugin(pm)
-	})
 }
