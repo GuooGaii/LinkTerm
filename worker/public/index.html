@@ -5,29 +5,32 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Web Terminal</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.css" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.css">
     <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/xterm-addon-web-links@0.9.0/lib/xterm-addon-web-links.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/xterm-addon-search@0.13.0/lib/xterm-addon-search.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/xterm-addon-webgl@0.16.0/lib/xterm-addon-webgl.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xterm-addon-webgl@0.15.0/lib/xterm-addon-webgl.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/xterm-addon-unicode11@0.6.0/lib/xterm-addon-unicode11.js"></script>
-    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xterm-addon-web-links@0.9.0/lib/xterm-addon-web-links.js"></script>
     <style>
-        .xterm {
-            font-size: 14px !important;
+        :root {
+            color-scheme: dark;
+            --terminal-font-family: "Courier New", monospace;
+            --xterm-font-size: 14px;
         }
 
-        /* 防止iOS Safari输入时放大 */
-        input {
-            font-size: 16px !important;
-            transform-origin: left top;
-            transform: scale(0.875);
+        html,
+        body {
+            height: 100%;
         }
 
-        /* 防止页面缩放和选择 */
-        * {
+        body {
+            margin: 0;
+            background: #000;
+            font-family: var(--terminal-font-family, "Courier New", monospace);
+            display: flex;
+            align-items: stretch;
+            justify-content: stretch;
+            touch-action: manipulation;
             -webkit-touch-callout: none;
             -webkit-user-select: none;
             -khtml-user-select: none;
@@ -36,422 +39,363 @@
             user-select: none;
         }
 
-        /* 允许输入框内容选择 */
-        input {
-            -webkit-user-select: text;
-            -khtml-user-select: text;
-            -moz-user-select: text;
-            -ms-user-select: text;
-            user-select: text;
+        #terminal-wrapper {
+            position: relative;
+            flex: 1;
+            display: flex;
         }
 
-        /* 防止iOS双击缩放 */
-        body {
-            touch-action: manipulation;
+        #terminal-container {
+            flex: 1;
+            display: flex;
+        }
+
+        #status-overlay {
+            pointer-events: none;
+            position: absolute;
+            top: 1.5rem;
+            left: 0;
+            right: 0;
+            display: none;
+            justify-content: center;
+            z-index: 10;
+        }
+
+        #status-overlay span {
+            padding: 0.6rem 1rem;
+            border-radius: 0.75rem;
+            border: 1px solid rgba(255, 255, 255, 0.16);
+            background: rgba(18, 18, 18, 0.9);
+            color: #e5e5e5;
+            font-size: 0.95rem;
+            letter-spacing: 0.02em;
+        }
+
+        #status-overlay[data-tone="error"] span {
+            color: #fca5a5;
+            border-color: rgba(252, 165, 165, 0.5);
+        }
+
+        #status-overlay[data-tone="warn"] span {
+            color: #fde68a;
+            border-color: rgba(253, 230, 138, 0.5);
+        }
+
+        .xterm {
+            font-family: var(--terminal-font-family, "Courier New", monospace);
+            font-size: var(--xterm-font-size, 14px);
         }
     </style>
 </head>
 
-<body class="m-0 p-0 bg-black font-mono h-screen flex flex-col">
-    <div id="app" class="h-screen flex flex-col">
-        <!-- 状态栏 - 固定顶部 -->
-        <div class="px-5 py-2.5 bg-gray-800 text-green-400 shrink-0 fixed top-0 left-0 right-0 z-10"
-            :class="{ 'text-red-500': isOffline }">
-            {{ statusText }}
-        </div>
-
-        <!-- 终端容器 - 中间区域 -->
-        <div id="terminal-container" class="bg-black p-3 fixed top-16 left-0 right-0"
-            :class="{ 'bottom-32': showActions && showShortcuts, 'bottom-16': showActions && !showShortcuts, 'bottom-0': !showActions }">
-        </div>
-
-        <!-- 快捷指令面板 - 输入框上方，可展开收起 -->
-        <div v-if="showActions && showShortcuts"
-            class="p-3 bg-gray-900 shrink-0 fixed left-0 right-0 bottom-16 z-10 flex flex-wrap gap-2 border-t border-gray-700">
-            <button @click="sendEnter"
-                class="px-3 py-1 bg-gray-700 hover:bg-gray-600 text-gray-300 text-xs border border-gray-600">
-                Enter
-            </button>
-            <button @click="sendArrowUp"
-                class="px-3 py-1 bg-gray-700 hover:bg-gray-600 text-gray-300 text-xs border border-gray-600">
-                ↑ Up
-            </button>
-            <button @click="sendArrowDown"
-                class="px-3 py-1 bg-gray-700 hover:bg-gray-600 text-gray-300 text-xs border border-gray-600">
-                ↓ Down
-            </button>
-            <button @click="sendEsc"
-                class="px-3 py-1 bg-gray-700 hover:bg-gray-600 text-gray-300 text-xs border border-gray-600">
-                Esc
-            </button>
-            <button @click="sendCtrlC"
-                class="px-3 py-1 bg-gray-700 hover:bg-gray-600 text-gray-300 text-xs border border-gray-600">
-                Ctrl+C
-            </button>
-            <button @click="sendSpace"
-                class="px-3 py-1 bg-gray-700 hover:bg-gray-600 text-gray-300 text-xs border border-gray-600">
-                Space
-            </button>
-            <button @click="restartPty"
-                class="px-3 py-1 bg-gray-700 hover:bg-gray-600 text-gray-300 text-xs border border-gray-600">
-                Restart
-            </button>
-        </div>
-
-        <!-- 输入框 - 固定底部 -->
-        <div v-if="showActions"
-            class="p-3 bg-gray-800 shrink-0 fixed bottom-0 left-0 right-0 z-10 border-t border-gray-600">
-            <div class="flex gap-2">
-                <button @click="toggleShortcuts"
-                    class="px-3 py-1 bg-green-600 hover:bg-green-700 text-white text-sm border border-green-500 rounded">
-                    {{ showShortcuts ? '▼' : '▲' }}
-                </button>
-                <input v-model="inputText" @keydown.enter="sendInput" placeholder="Type command here..."
-                    class="flex-1 px-3 py-1 bg-gray-700 text-white text-sm border border-gray-600 rounded focus:outline-none focus:border-gray-400" />
-                <button @click="sendInput"
-                    class="px-4 py-1 bg-blue-600 hover:bg-blue-700 text-white text-sm border border-blue-500 rounded">
-                    Input
-                </button>
-            </div>
-        </div>
+<body>
+    <div id="terminal-wrapper">
+        <div id="terminal-container" role="presentation"></div>
+        <div id="status-overlay"><span id="status-text"></span></div>
     </div>
 
     <script>
-        const { createApp, ref, computed, onMounted } = Vue;
+        (function () {
+            'use strict';
 
-        createApp({
-            setup() {
-                // ==================== 响应式状态 ====================
-                const statusText = ref('连接中...');
-                const isOffline = ref(false);
-                const showActions = ref(false);
-                const showShortcuts = ref(false);
-                const inputText = ref('');
+            const statusOverlay = document.getElementById('status-overlay');
+            const statusText = document.getElementById('status-text');
+            const terminalContainer = document.getElementById('terminal-container');
 
-                // ==================== 终端相关变量 ====================
-                let terminal = null;
-                let fitAddon = null;
-                let ws = null;
-                let sessionId = null;
+            let terminal = null;
+            let fitAddon = null;
+            let webglAddon = null;
+            let unicode11Addon = null;
+            let webLinksAddon = null;
+            let ws = null;
+            let reconnectTimer = null;
+            let latestConfig = null;
 
-                // ==================== 计算属性 ====================
-                const wsUrl = computed(() =>
-                    sessionId ? `wss://${location.host}/ws?session=${sessionId}` : null
-                );
+            const urlParams = new URLSearchParams(window.location.search);
+            const sessionId = urlParams.get('session');
 
-                // ==================== 初始化终端 ====================
-                const initTerminal = () => {
-                    // 创建终端实例，配置渲染优化参数
-                    terminal = new Terminal({
-                        cursorBlink: true,
-                        theme: {
-                            background: '#000000',
-                            foreground: '#ffffff',
-                            cursor: '#ffffff'
-                        },
-                        fontSize: 14,
-                        fontFamily: 'Courier New, monospace',
-                        lineHeight: 1.2,
-                        scrollback: 5000,
-                        windowOptions: {
-                            setWinLines: true
-                        },
-                        allowProposedApi: true,      // 启用实验性API以获得更好的渲染性能
-                        allowTransparency: false,     // 禁用透明度，提升渲染性能
-                        convertEol: false,            // 不自动转换换行符，保持原始ANSI输出
-                        fastScrollModifier: 'shift',  // Shift+滚轮快速滚动
-                        scrollSensitivity: 1,
-                        altClickMovesCursor: true,    // Alt+点击移动光标
-                        macOptionIsMeta: true,
-                        rightClickSelectsWord: true   // 右键选中单词
-                    });
+            function showStatus(message, tone = 'info') {
+                if (!message) {
+                    statusOverlay.style.display = 'none';
+                    statusOverlay.dataset.tone = '';
+                    statusText.textContent = '';
+                    return;
+                }
 
-                    // 加载 Fit 插件 - 自适应终端大小
-                    fitAddon = new FitAddon.FitAddon();
-                    terminal.loadAddon(fitAddon);
+                statusOverlay.style.display = 'flex';
+                statusOverlay.dataset.tone = tone;
+                statusText.textContent = message;
+            }
 
-                    // 打开终端容器
-                    terminal.open(document.getElementById('terminal-container'));
+            function writeSystemMessage(message, colorCode = 90) {
+                if (!terminal) return;
+                terminal.writeln(`\u001b[${colorCode}m${message}\u001b[0m`);
+            }
 
-                    // 【关键优化】立即加载 WebGL 渲染器（必须在 open() 之后，且优先加载）
-                    try {
-                        const webglAddon = new WebglAddon.WebglAddon();
-                        terminal.loadAddon(webglAddon);
-                        console.log('✅ WebGL 渲染器已启用');
-                    } catch (e) {
-                        console.warn('⚠️ WebGL 加载失败，使用 Canvas 渲染:', e);
+            function createWsUrl() {
+                const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+                return `${protocol}//${window.location.host}/ws?session=${encodeURIComponent(sessionId)}`;
+            }
+
+            function sendResize() {
+                if (!ws || ws.readyState !== WebSocket.OPEN || !terminal) return;
+
+                ws.send(JSON.stringify({
+                    type: 'system.resize',
+                    to: 'desktop',
+                    data: { cols: terminal.cols, rows: terminal.rows }
+                }));
+            }
+
+            function applyConfig(config) {
+                if (!config) return;
+
+                latestConfig = {
+                    ...(latestConfig || {}),
+                    ...config,
+                    themeColors: {
+                        ...(((latestConfig || {}).themeColors) || {}),
+                        ...((config.themeColors || {}))
                     }
-
-                    // 加载 WebLinks 插件 - 使URL可点击
-                    const webLinksAddon = new WebLinksAddon.WebLinksAddon();
-                    terminal.loadAddon(webLinksAddon);
-
-                    // 加载 Search 插件 - 添加搜索功能
-                    const searchAddon = new SearchAddon.SearchAddon();
-                    terminal.loadAddon(searchAddon);
-
-                    // 加载 Unicode11 插件 - 更好的Unicode支持
-                    const unicode11Addon = new Unicode11Addon.Unicode11Addon();
-                    terminal.loadAddon(unicode11Addon);
-                    terminal.unicode.activeVersion = '11';
-
-                    // 适配终端大小
-                    fitAddon.fit();
-                    console.log(`终端初始化完成: ${terminal.cols}x${terminal.rows}`);
-
-                    // 监听用户输入
-                    terminal.onData(function (data) {
-                        if (ws && ws.readyState === WebSocket.OPEN) {
-                            ws.send(JSON.stringify({
-                                type: 'data.input',
-                                to: 'desktop',
-                                data: { input: data }
-                            }));
-                        }
-                    });
                 };
 
-                // ==================== WebSocket 连接 ====================
-                const connect = () => {
-                    if (!wsUrl.value) return;
+                const merged = latestConfig;
+                const hasTerminal = !!terminal;
 
-                    ws = new WebSocket(wsUrl.value);
+                if (merged.themeColors && typeof merged.themeColors === 'object') {
+                    const { background, foreground, cursor } = merged.themeColors;
 
-                    ws.onopen = function () {
-                        console.log('WebSocket 已连接');
-                        statusText.value = '已连接，等待桌面端...';
-                        isOffline.value = false;
+                    if (background) {
+                        document.body.style.backgroundColor = background;
+                    }
+                    if (foreground) {
+                        document.body.style.color = foreground;
+                    }
 
-                        // 通知服务器 Web 端已连接
-                        ws.send(JSON.stringify({
-                            type: 'connection.devices',
-                            to: 'all',
-                            data: { deviceType: 'web', status: 'connected' }
-                        }));
-                    };
+                    if (hasTerminal) {
+                        // xterm.js 不再支持 getOption，直接设置新主题
+                        terminal.options.theme = {
+                            ...merged.themeColors
+                        };
+                    }
+                }
 
-                    ws.onmessage = function (event) {
+                if (merged.fontFamily) {
+                    document.documentElement.style.setProperty('--terminal-font-family', merged.fontFamily);
+                    if (hasTerminal) {
+                        terminal.options.fontFamily = merged.fontFamily;
+                    }
+                }
+
+                if (typeof merged.fontSize === 'number' && Number.isFinite(merged.fontSize) && merged.fontSize > 0) {
+                    document.documentElement.style.setProperty('--xterm-font-size', `${merged.fontSize}px`);
+                    if (hasTerminal) {
+                        terminal.options.fontSize = merged.fontSize;
+                    }
+                }
+
+                if (typeof merged.cursorBlink === 'boolean' && hasTerminal) {
+                    terminal.options.cursorBlink = merged.cursorBlink;
+                }
+
+                if (typeof merged.lineHeight === 'number' && Number.isFinite(merged.lineHeight) && merged.lineHeight > 0 && hasTerminal) {
+                    terminal.options.lineHeight = merged.lineHeight;
+                }
+
+                if (typeof merged.opacity === 'number' && Number.isFinite(merged.opacity)) {
+                    const clamped = Math.min(1, Math.max(0.1, merged.opacity));
+                    terminalContainer.style.opacity = clamped;
+                }
+
+                if (hasTerminal && fitAddon) {
+                    // 等待选项更新后再调整尺寸
+                    setTimeout(() => {
                         try {
-                            const message = JSON.parse(event.data);
-
-                            switch (message.type) {
-                                // 处理终端输出
-                                case 'data.output':
-                                    if (message.data && message.data.output) {
-                                        terminal.write(message.data.output);
-                                    }
-                                    break;
-
-                                // 处理初始化尺寸
-                                case 'system.init':
-                                    if (message.data && message.data.cols && message.data.rows) {
-                                        terminal.resize(message.data.cols, message.data.rows);
-                                        fitAddon.fit();
-                                        console.log(`终端尺寸初始化: ${message.data.cols}x${message.data.rows}`);
-                                    }
-                                    break;
-
-                                // 处理设备连接状态
-                                case 'connection.devices':
-                                    if (message.data && message.data.devices) {
-                                        const desktopConnected = message.data.devices.desktop === 'connected';
-                                        if (desktopConnected) {
-                                            console.log('桌面端已连接');
-                                            statusText.value = '已连接到桌面端';
-                                            isOffline.value = false;
-                                            showActions.value = true;
-
-                                            // 桌面端连接后发送当前终端尺寸
-                                            if (terminal) {
-                                                ws.send(JSON.stringify({
-                                                    type: 'system.resize',
-                                                    to: 'desktop',
-                                                    data: { cols: terminal.cols, rows: terminal.rows }
-                                                }));
-                                            }
-                                        } else {
-                                            console.log('等待桌面端连接');
-                                            statusText.value = '等待桌面端连接...';
-                                            isOffline.value = true;
-                                            showActions.value = false;
-                                        }
-                                    }
-                                    break;
-                            }
+                            fitAddon.fit();
+                            sendResize();  // 通知后端新的尺寸
                         } catch (error) {
-                            console.error('处理消息失败:', error);
+                            console.warn('终端自适应失败:', error);
                         }
-                    };
+                    }, 100);
+                }
+            }
 
-                    ws.onclose = function () {
-                        console.log('WebSocket 连接已断开，3秒后重连');
-                        statusText.value = '连接已断开，3秒后重连...';
-                        isOffline.value = true;
-                        showActions.value = false;
-                        setTimeout(connect, 3000);
-                    };
-
-                    ws.onerror = function (error) {
-                        console.error('WebSocket 错误:', error);
-                        statusText.value = '连接错误';
-                        isOffline.value = true;
-                        showActions.value = false;
-                    };
-                };
-
-                // ==================== 系统命令 ====================
-                const restartPty = () => {
-                    if (ws && ws.readyState === WebSocket.OPEN) {
-                        ws.send(JSON.stringify({
-                            type: 'system.command',
-                            to: 'desktop',
-                            data: { command: 'restart' }
-                        }));
-                        statusText.value = '正在重启终端...';
-                    }
-                };
-
-                const sendCtrlC = () => {
-                    if (ws && ws.readyState === WebSocket.OPEN) {
-                        ws.send(JSON.stringify({
-                            type: 'system.command',
-                            to: 'desktop',
-                            data: { command: 'ctrl_c' }
-                        }));
-                    }
-                };
-
-                // ==================== 快捷键输入 ====================
-                const sendEnter = () => {
-                    if (ws && ws.readyState === WebSocket.OPEN) {
-                        ws.send(JSON.stringify({
-                            type: 'data.input',
-                            to: 'desktop',
-                            data: { input: '\r' }
-                        }));
-                    }
-                };
-
-                const sendArrowUp = () => {
-                    if (ws && ws.readyState === WebSocket.OPEN) {
-                        ws.send(JSON.stringify({
-                            type: 'data.input',
-                            to: 'desktop',
-                            data: { input: '\x1b[A' }
-                        }));
-                    }
-                };
-
-                const sendArrowDown = () => {
-                    if (ws && ws.readyState === WebSocket.OPEN) {
-                        ws.send(JSON.stringify({
-                            type: 'data.input',
-                            to: 'desktop',
-                            data: { input: '\x1b[B' }
-                        }));
-                    }
-                };
-
-                const sendEsc = () => {
-                    if (ws && ws.readyState === WebSocket.OPEN) {
-                        ws.send(JSON.stringify({
-                            type: 'data.input',
-                            to: 'desktop',
-                            data: { input: '\x1b' }
-                        }));
-                    }
-                };
-
-                const sendSpace = () => {
-                    if (ws && ws.readyState === WebSocket.OPEN) {
-                        ws.send(JSON.stringify({
-                            type: 'data.input',
-                            to: 'desktop',
-                            data: { input: ' ' }
-                        }));
-                    }
-                };
-
-                const sendInput = () => {
-                    if (ws && ws.readyState === WebSocket.OPEN && inputText.value.trim()) {
-                        ws.send(JSON.stringify({
-                            type: 'data.input',
-                            to: 'desktop',
-                            data: { input: inputText.value }
-                        }));
-                        inputText.value = '';
-                    }
-                };
-
-                // ==================== UI 控制 ====================
-                const toggleShortcuts = () => {
-                    showShortcuts.value = !showShortcuts.value;
-                };
-
-                // ==================== 生命周期钩子 ====================
-                onMounted(() => {
-                    // 获取 URL 参数中的 session ID
-                    const urlParams = new URLSearchParams(window.location.search);
-                    sessionId = urlParams.get('session');
-
-                    // 验证 session ID
-                    if (!sessionId || sessionId === 'default') {
-                        console.error('无效的 session ID');
-                        statusText.value = '无效的访问链接，请通过桌面应用程序生成的链接访问';
-                        isOffline.value = true;
-                        document.getElementById('terminal-container').style.display = 'none';
-                        return;
-                    }
-
-                    console.log('Session ID:', sessionId);
-
-                    // 初始化终端和连接
-                    initTerminal();
-                    connect();
-
-                    // 监听窗口大小变化
-                    window.addEventListener('resize', () => {
-                        fitAddon.fit();
-                        if (ws && ws.readyState === WebSocket.OPEN) {
-                            ws.send(JSON.stringify({
-                                type: 'system.resize',
-                                to: 'desktop',
-                                data: { cols: terminal.cols, rows: terminal.rows }
-                            }));
-                            console.log(`窗口 resize: ${terminal.cols}x${terminal.rows}`);
-                        }
-                    });
-
-                    // 页面关闭时清理连接
-                    window.addEventListener('beforeunload', () => {
-                        if (ws) {
-                            console.log('页面关闭，断开 WebSocket 连接');
-                            ws.close();
-                        }
-                    });
+            function initTerminal() {
+                terminal = new Terminal({
+                    cursorBlink: true,
+                    theme: {
+                        background: '#000000',
+                        foreground: '#ffffff',
+                        cursor: '#ffffff'
+                    },
+                    fontSize: 14,
+                    fontFamily: 'Courier New, monospace',
+                    allowProposedApi: true  // 启用 proposed API 以支持 Unicode11
                 });
 
-                // ==================== 导出给模板使用 ====================
-                return {
-                    // 状态
-                    statusText,
-                    isOffline,
-                    showActions,
-                    showShortcuts,
-                    inputText,
-                    // 方法
-                    restartPty,
-                    sendCtrlC,
-                    sendEnter,
-                    sendArrowUp,
-                    sendArrowDown,
-                    sendEsc,
-                    sendInput,
-                    sendSpace,
-                    toggleShortcuts
-                };
+                fitAddon = new FitAddon.FitAddon();
+                terminal.loadAddon(fitAddon);
+
+                if (window.WebglAddon && typeof WebglAddon.WebglAddon === 'function') {
+                    try {
+                        webglAddon = new WebglAddon.WebglAddon();
+                        terminal.loadAddon(webglAddon);
+                    } catch (error) {
+                        console.warn('WebGL 插件初始化失败，使用 Canvas 渲染。', error);
+                    }
+                }
+
+                // 加载 Unicode11 插件以支持更好的 Unicode 字符显示（包括 emoji）
+                if (window.Unicode11Addon && typeof Unicode11Addon.Unicode11Addon === 'function') {
+                    try {
+                        unicode11Addon = new Unicode11Addon.Unicode11Addon();
+                        terminal.loadAddon(unicode11Addon);
+                        terminal.unicode.activeVersion = '11';
+                        console.log('Unicode11 插件已加载');
+                    } catch (error) {
+                        console.warn('Unicode11 插件初始化失败:', error);
+                    }
+                }
+
+                // 加载 WebLinks 插件以自动识别并使 URL 可点击
+                if (window.WebLinksAddon && typeof WebLinksAddon.WebLinksAddon === 'function') {
+                    try {
+                        webLinksAddon = new WebLinksAddon.WebLinksAddon();
+                        terminal.loadAddon(webLinksAddon);
+                        console.log('WebLinks 插件已加载');
+                    } catch (error) {
+                        console.warn('WebLinks 插件初始化失败:', error);
+                    }
+                }
+
+                terminal.open(terminalContainer);
+                fitAddon.fit();
+                terminal.focus();
+
+                if (latestConfig) {
+                    applyConfig(latestConfig);
+                }
+
+                terminal.onData((data) => {
+                    if (ws && ws.readyState === WebSocket.OPEN) {
+                        ws.send(JSON.stringify({
+                            type: 'data.input',
+                            to: 'desktop',
+                            data: { input: data }
+                        }));
+                    }
+                });
             }
-        }).mount('#app');
+
+            function scheduleReconnect() {
+                if (reconnectTimer) return;
+
+                reconnectTimer = setTimeout(() => {
+                    reconnectTimer = null;
+                    connect();
+                }, 3000);
+            }
+
+            function connect() {
+                if (!sessionId || sessionId === 'default') {
+                    showStatus('无效的访问链接，请通过桌面应用程序生成的链接访问。', 'error');
+                    return;
+                }
+
+                if (!terminal) {
+                    initTerminal();
+                }
+
+                const wsUrl = createWsUrl();
+
+                showStatus('连接中...');
+                writeSystemMessage(`[web] connecting to ${wsUrl}`, 90);
+
+                ws = new WebSocket(wsUrl);
+
+                ws.addEventListener('open', () => {
+                    showStatus('已连接，等待桌面端...');
+                    writeSystemMessage('[web] connected', 92);
+
+                    ws.send(JSON.stringify({
+                        type: 'connection.devices',
+                        to: 'all',
+                        data: { deviceType: 'web', status: 'connected' }
+                    }));
+                });
+
+                ws.addEventListener('message', (event) => {
+                    try {
+                        const message = JSON.parse(event.data);
+
+                        switch (message.type) {
+                            case 'data.output':
+                                if (message.data && message.data.output) {
+                                    terminal.write(message.data.output);
+                                }
+                                break;
+
+                            case 'system.init':
+                                if (message.data && message.data.cols && message.data.rows) {
+                                    terminal.resize(message.data.cols, message.data.rows);
+                                    fitAddon.fit();
+                                }
+                                break;
+
+                            case 'connection.devices':
+                                if (message.data && message.data.devices) {
+                                    const desktopConnected = message.data.devices.desktop === 'connected';
+
+                                    if (desktopConnected) {
+                                        showStatus('');
+                                        writeSystemMessage('[desktop] connected', 92);
+                                        sendResize();
+                                    } else {
+                                        showStatus('等待桌面端连接...', 'warn');
+                                        writeSystemMessage('[desktop] disconnected', 91);
+                                    }
+                                }
+                                break;
+
+                            case 'system.config':
+                                applyConfig(message.data || {});
+                                break;
+
+                            default:
+                                break;
+                        }
+                    } catch (error) {
+                        console.error('处理消息失败:', error);
+                    }
+                });
+
+                ws.addEventListener('close', () => {
+                    showStatus('连接已断开，3秒后重连...', 'warn');
+                    writeSystemMessage('[web] connection closed, retrying...', 93);
+                    scheduleReconnect();
+                });
+
+                ws.addEventListener('error', (error) => {
+                    console.error('WebSocket 错误:', error);
+                    showStatus('连接错误', 'error');
+                });
+            }
+
+            window.addEventListener('resize', () => {
+                if (fitAddon) {
+                    fitAddon.fit();
+                    sendResize();
+                }
+            });
+
+            window.addEventListener('beforeunload', () => {
+                if (ws) {
+                    ws.close();
+                }
+            });
+
+            connect();
+        })();
     </script>
 </body>
 
