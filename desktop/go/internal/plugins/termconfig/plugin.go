@@ -7,8 +7,6 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"path/filepath"
-	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -19,36 +17,34 @@ import (
 	"terminal-client/internal/plugins"
 )
 
-const metadataFile = "metadata.json"
-
-func resolveMetadataPath() (string, error) {
-	_, file, _, ok := runtime.Caller(0)
-	if !ok {
-		return "", fmt.Errorf("cannot determine plugin source directory")
-	}
-	return filepath.Join(filepath.Dir(file), metadataFile), nil
-}
+const (
+	pluginName        = "termconfig"
+	pluginVersion     = "1.0.0"
+	pluginDescription = "终端配置命令 - 管理终端外观和行为设置"
+)
 
 // TermConfigPlugin 管理终端外观和行为设置的命令插件。
-type TermConfigPlugin struct {
-	*plugins.BasePlugin
-}
+type TermConfigPlugin struct{}
 
 // New 创建 termconfig 插件。
 func New() (*TermConfigPlugin, error) {
-	metadataPath, err := resolveMetadataPath()
-	if err != nil {
-		return nil, fmt.Errorf("locate metadata: %w", err)
-	}
+	return &TermConfigPlugin{}, nil
+}
 
-	base, err := plugins.NewBasePluginFromMetadata(metadataPath)
-	if err != nil {
-		return nil, fmt.Errorf("load metadata: %w", err)
-	}
+func (p *TermConfigPlugin) Name() string {
+	return pluginName
+}
 
-	return &TermConfigPlugin{
-		BasePlugin: base,
-	}, nil
+func (p *TermConfigPlugin) Description() string {
+	return pluginDescription
+}
+
+func (p *TermConfigPlugin) Version() string {
+	return pluginVersion
+}
+
+func (p *TermConfigPlugin) Dependencies() []string {
+	return nil
 }
 
 func (p *TermConfigPlugin) CommandName() string {
@@ -87,17 +83,17 @@ func (p *TermConfigPlugin) SubCommands() []string {
 
 func (p *TermConfigPlugin) Init(ctx context.Context) error {
 	log.Printf("   初始化 termconfig 插件")
-	return p.BasePlugin.Init(ctx)
+	return nil
 }
 
 func (p *TermConfigPlugin) Start(ctx context.Context) error {
 	log.Printf("   启动 termconfig 插件")
-	return p.BasePlugin.Start(ctx)
+	return nil
 }
 
 func (p *TermConfigPlugin) Stop(ctx context.Context) error {
 	log.Printf("   停止 termconfig 插件")
-	return p.BasePlugin.Stop(ctx)
+	return nil
 }
 
 func (p *TermConfigPlugin) Execute(ctx plugins.CommandContext, args []string) (bool, string) {

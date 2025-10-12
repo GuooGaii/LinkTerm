@@ -2,21 +2,20 @@ package plugins
 
 import (
 	"fmt"
+	"sort"
 	"sync"
 )
 
-// Factory constructs a plugin instance and allows factories to receive the
-// plugin manager for additional context if necessary.
+// Factory 构造插件实例，允许在构造时收到插件管理器。
 type Factory func(*Manager) (Plugin, error)
 
 var (
-	factoryMu sync.RWMutex
-	factories = map[string]Factory{}
+	factoryMu    sync.RWMutex
+	factories    = map[string]Factory{}
+	factoryNames []string
 )
 
-// RegisterFactory registers a factory for the given plugin name. It panics if
-// the name is empty or already registered, since factories are typically
-// declared during init() and such errors should surface immediately.
+// RegisterFactory 注册插件工厂。重复注册或无效输入会 panic，以便在开发阶段及时暴露问题。
 func RegisterFactory(name string, factory Factory) {
 	if name == "" {
 		panic("plugins: factory name cannot be empty")
@@ -33,12 +32,25 @@ func RegisterFactory(name string, factory Factory) {
 	}
 
 	factories[name] = factory
+	factoryNames = append(factoryNames, name)
+	sort.Strings(factoryNames)
 }
 
-// lookupFactory returns the factory registered for the given name.
-func lookupFactory(name string) (Factory, bool) {
+type factoryEntry struct {
+	name    string
+	factory Factory
+}
+
+func registeredFactories() []factoryEntry {
 	factoryMu.RLock()
 	defer factoryMu.RUnlock()
-	factory, ok := factories[name]
-	return factory, ok
+
+	entries := make([]factoryEntry, 0, len(factoryNames))
+	for _, name := range factoryNames {
+		entries = append(entries, factoryEntry{
+			name:    name,
+			factory: factories[name],
+		})
+	}
+	return entries
 }

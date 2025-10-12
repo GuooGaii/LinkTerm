@@ -10,28 +10,24 @@ import (
 
 // Manager keeps track of all registered plugins and their lifecycle.
 type Manager struct {
-	plugins          map[string]Plugin
-	commandPlugins   map[string]CommandPlugin
-	eventHooks       map[string][]EventHook
-	extensionPlugins map[string]ExtensionPlugin
-	enabledPlugins   map[string]bool
-	mu               sync.RWMutex
-	ctx              context.Context
-	cancel           context.CancelFunc
-	started          bool
+	plugins        map[string]Plugin
+	commandPlugins map[string]CommandPlugin
+	enabledPlugins map[string]bool
+	mu             sync.RWMutex
+	ctx            context.Context
+	cancel         context.CancelFunc
+	started        bool
 }
 
 // NewManager creates a fresh plugin manager.
 func NewManager() *Manager {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &Manager{
-		plugins:          make(map[string]Plugin),
-		commandPlugins:   make(map[string]CommandPlugin),
-		eventHooks:       make(map[string][]EventHook),
-		extensionPlugins: make(map[string]ExtensionPlugin),
-		enabledPlugins:   make(map[string]bool),
-		ctx:              ctx,
-		cancel:           cancel,
+		plugins:        make(map[string]Plugin),
+		commandPlugins: make(map[string]CommandPlugin),
+		enabledPlugins: make(map[string]bool),
+		ctx:            ctx,
+		cancel:         cancel,
 	}
 }
 
@@ -64,64 +60,7 @@ func (pm *Manager) Register(plugin Plugin) error {
 		log.Printf("✅ 已注册命令插件: %s -> %s", name, cmdName)
 	}
 
-	if hookPlugin, ok := plugin.(EventHook); ok {
-		for _, eventType := range hookPlugin.EventTypes() {
-			pm.eventHooks[eventType] = append(pm.eventHooks[eventType], hookPlugin)
-		}
-		for eventType := range pm.eventHooks {
-			sort.Slice(pm.eventHooks[eventType], func(i, j int) bool {
-				return pm.eventHooks[eventType][i].Priority() < pm.eventHooks[eventType][j].Priority()
-			})
-		}
-		log.Printf("✅ 已注册事件钩子插件: %s", name)
-	}
-
-	if extPlugin, ok := plugin.(ExtensionPlugin); ok {
-		extType := extPlugin.ExtensionType()
-		if extType == "" {
-			return NewPluginError(name, "extension type cannot be empty", nil)
-		}
-		pm.extensionPlugins[extType] = extPlugin
-		log.Printf("✅ 已注册扩展插件: %s [%s]", name, extType)
-	}
-
 	log.Printf("📦 已注册插件: %s v%s - %s", name, plugin.Version(), plugin.Description())
-	return nil
-}
-
-// Unregister removes a plugin.
-func (pm *Manager) Unregister(name string) error {
-	pm.mu.Lock()
-	defer pm.mu.Unlock()
-
-	plugin, exists := pm.plugins[name]
-	if !exists {
-		return fmt.Errorf("plugin %s not found", name)
-	}
-
-	if cmdPlugin, ok := plugin.(CommandPlugin); ok {
-		delete(pm.commandPlugins, cmdPlugin.CommandName())
-	}
-
-	if hookPlugin, ok := plugin.(EventHook); ok {
-		for _, eventType := range hookPlugin.EventTypes() {
-			hooks := pm.eventHooks[eventType]
-			for i, hook := range hooks {
-				if hook.Name() == name {
-					pm.eventHooks[eventType] = append(hooks[:i], hooks[i+1:]...)
-					break
-				}
-			}
-		}
-	}
-
-	if extPlugin, ok := plugin.(ExtensionPlugin); ok {
-		delete(pm.extensionPlugins, extPlugin.ExtensionType())
-	}
-
-	delete(pm.enabledPlugins, name)
-	delete(pm.plugins, name)
-	log.Printf("🗑️  已取消注册插件: %s", name)
 	return nil
 }
 
@@ -225,29 +164,6 @@ func (pm *Manager) ListCommands() []string {
 	return commands
 }
 
-// EmitEvent broadcasts an event to subscribed hooks.
-func (pm *Manager) EmitEvent(event *Event) error {
-	pm.mu.RLock()
-	hooks := pm.eventHooks[event.Type]
-	pm.mu.RUnlock()
-
-	for _, hook := range hooks {
-		if err := hook.OnEvent(pm.ctx, event); err != nil {
-			log.Printf("⚠️  钩子 %s 处理事件 %s 失败: %v", hook.Name(), event.Type, err)
-		}
-	}
-
-	return nil
-}
-
-// GetExtension fetches an extension by type.
-func (pm *Manager) GetExtension(extensionType string) (ExtensionPlugin, bool) {
-	pm.mu.RLock()
-	defer pm.mu.RUnlock()
-	plugin, exists := pm.extensionPlugins[extensionType]
-	return plugin, exists
-}
-
 // GetPlugin returns a plugin by name.
 func (pm *Manager) GetPlugin(name string) (Plugin, bool) {
 	pm.mu.RLock()
@@ -257,25 +173,18 @@ func (pm *Manager) GetPlugin(name string) (Plugin, bool) {
 }
 
 // ListPlugins collects metadata for registered plugins.
-func (pm *Manager) ListPlugins() []PluginMetadata {
+func (pm *Manager) ListPlugins() []PluginInfo {
 	pm.mu.RLock()
 	defer pm.mu.RUnlock()
 
-	metadata := make([]PluginMetadata, 0, len(pm.plugins))
+	metadata := make([]PluginInfo, 0, len(pm.plugins))
 	for _, plugin := range pm.plugins {
 		name := plugin.Name()
-		var persistent map[string]interface{}
-		if provider, ok := plugin.(interface {
-			PersistentState() map[string]interface{}
-		}); ok {
-			persistent = provider.PersistentState()
-		}
-		metadata = append(metadata, PluginMetadata{
+		metadata = append(metadata, PluginInfo{
 			Name:         name,
 			Description:  plugin.Description(),
 			Version:      plugin.Version(),
 			Dependencies: plugin.Dependencies(),
-			Persistent:   persistent,
 			Enabled:      pm.enabledPlugins[name],
 		})
 	}

@@ -3,45 +3,44 @@ package info
 import (
 	"context"
 	"fmt"
-	"path/filepath"
 	"runtime"
 	"strings"
 
 	"terminal-client/internal/plugins"
 )
 
-const metadataFile = "metadata.json"
-
-func resolveMetadataPath() (string, error) {
-	_, file, _, ok := runtime.Caller(0)
-	if !ok {
-		return "", fmt.Errorf("cannot determine plugin source directory")
-	}
-	return filepath.Join(filepath.Dir(file), metadataFile), nil
-}
+const (
+	pluginName        = "info"
+	pluginVersion     = "1.0.0"
+	pluginDescription = "显示系统和插件信息"
+)
 
 // InfoPlugin exposes runtime and plugin details.
 type InfoPlugin struct {
-	*plugins.BasePlugin
 	pluginManager *plugins.Manager
 }
 
 // New constructs the info command plugin.
 func New(pm *plugins.Manager) (*InfoPlugin, error) {
-	path, err := resolveMetadataPath()
-	if err != nil {
-		return nil, fmt.Errorf("locate metadata: %w", err)
-	}
-
-	base, err := plugins.NewBasePluginFromMetadata(path)
-	if err != nil {
-		return nil, fmt.Errorf("load metadata: %w", err)
-	}
-
 	return &InfoPlugin{
-		BasePlugin:    base,
 		pluginManager: pm,
 	}, nil
+}
+
+func (p *InfoPlugin) Name() string {
+	return pluginName
+}
+
+func (p *InfoPlugin) Description() string {
+	return pluginDescription
+}
+
+func (p *InfoPlugin) Version() string {
+	return pluginVersion
+}
+
+func (p *InfoPlugin) Dependencies() []string {
+	return nil
 }
 
 func (p *InfoPlugin) CommandName() string {
@@ -85,15 +84,15 @@ func (p *InfoPlugin) SubCommands() []string {
 }
 
 func (p *InfoPlugin) Init(ctx context.Context) error {
-	return p.BasePlugin.Init(ctx)
+	return nil
 }
 
 func (p *InfoPlugin) Start(ctx context.Context) error {
-	return p.BasePlugin.Start(ctx)
+	return nil
 }
 
 func (p *InfoPlugin) Stop(ctx context.Context) error {
-	return p.BasePlugin.Stop(ctx)
+	return nil
 }
 
 func (p *InfoPlugin) getSystemInfo() string {
@@ -132,22 +131,22 @@ func (p *InfoPlugin) listPlugins() string {
 		return "插件管理器不可用"
 	}
 
-	pluginsMetadata := p.pluginManager.ListPlugins()
-	if len(pluginsMetadata) == 0 {
+	pluginInfos := p.pluginManager.ListPlugins()
+	if len(pluginInfos) == 0 {
 		return "没有已加载的插件"
 	}
 
 	enabledCount := 0
-	for _, metadata := range pluginsMetadata {
-		if metadata.Enabled {
+	for _, info := range pluginInfos {
+		if info.Enabled {
 			enabledCount++
 		}
 	}
 
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("=== 已加载的插件 (%d) | 已启用: %d ===\n\n", len(pluginsMetadata), enabledCount))
+	sb.WriteString(fmt.Sprintf("=== 已加载的插件 (%d) | 已启用: %d ===\n\n", len(pluginInfos), enabledCount))
 
-	for _, metadata := range pluginsMetadata {
+	for _, metadata := range pluginInfos {
 		status := "停用"
 		if metadata.Enabled {
 			status = "启用"
@@ -156,12 +155,6 @@ func (p *InfoPlugin) listPlugins() string {
 		sb.WriteString(fmt.Sprintf("   %s\n", metadata.Description))
 		if len(metadata.Dependencies) > 0 {
 			sb.WriteString(fmt.Sprintf("   依赖: %v\n", metadata.Dependencies))
-		}
-		if len(metadata.Persistent) > 0 {
-			sb.WriteString("   持久化变量:\n")
-			for key, value := range metadata.Persistent {
-				sb.WriteString(fmt.Sprintf("     - %s: %v\n", key, value))
-			}
 		}
 		sb.WriteString("\n")
 	}
