@@ -45,10 +45,8 @@ func (p *TermConfigPlugin) Usage() string {
 
 命令:
   font                 显示交互式字体选择器
-  font <字体名称>      设置字体 (可用编号选择)
   font-size [大小]     设置字号 (8-48)
   theme                显示交互式主题选择器
-  theme <主题>         设置主题 (可用编号选择)
   opacity <透明度>     设置透明度 (0.1-1.0)
   cursor [on|off]      开关光标闪烁
   line-height <行高>   设置行高 (1.0-2.0)
@@ -58,12 +56,10 @@ func (p *TermConfigPlugin) Usage() string {
 
 示例:
   termconfig font                  # 交互式选择字体
-  termconfig font "JetBrains Mono"
-  termconfig font 2
   termconfig theme                 # 交互式选择主题
-  termconfig theme dark
-  termconfig theme 1
   termconfig font-size 16
+  termconfig opacity 0.8
+  termconfig cursor on
   termconfig reset`
 }
 
@@ -119,7 +115,7 @@ func (p *TermConfigPlugin) Execute(ctx plugins.CommandContext, args []string) (b
 	}
 }
 
-func (p *TermConfigPlugin) handleFont(ctx plugins.CommandContext, args []string) (bool, string) {
+func (p *TermConfigPlugin) handleFont(ctx plugins.CommandContext, _ []string) (bool, string) {
 	cfg, err := p.loadConfig(ctx)
 	if err != nil {
 		return false, fmt.Sprintf("❌ 加载配置失败: %v", err)
@@ -127,18 +123,8 @@ func (p *TermConfigPlugin) handleFont(ctx plugins.CommandContext, args []string)
 
 	fonts := config.AvailableFonts()
 
-	if len(args) == 0 {
-		return p.runFontSurvey(ctx, cfg, fonts)
-	}
-
-	input := strings.Join(args, " ")
-	selectedFont, err := p.resolveFontSelection(input, fonts)
-	if err != nil {
-		return false, err.Error()
-	}
-
-	cfg.Terminal.FontFamily = fmt.Sprintf("\"%s\", monospace", selectedFont)
-	return p.saveAndPush(ctx, cfg, fmt.Sprintf("✅ 字体已设置为: %s", selectedFont))
+	// 只支持交互式选择
+	return p.runFontSurvey(ctx, cfg, fonts)
 }
 
 func (p *TermConfigPlugin) runFontSurvey(ctx plugins.CommandContext, cfg *config.Config, fonts []string) (bool, string) {
@@ -166,24 +152,6 @@ func (p *TermConfigPlugin) runFontSurvey(ctx plugins.CommandContext, cfg *config
 	return p.saveAndPush(ctx, cfg, fmt.Sprintf("✅ 字体已设置为: %s", result))
 }
 
-func (p *TermConfigPlugin) resolveFontSelection(input string, fonts []string) (string, error) {
-	if index, err := strconv.Atoi(input); err == nil {
-		index--
-		if index < 0 || index >= len(fonts) {
-			return "", fmt.Errorf("字体编号必须在 1-%d 之间", len(fonts))
-		}
-		return fonts[index], nil
-	}
-
-	trimmed := strings.TrimSpace(strings.Trim(input, `"'`))
-	for _, font := range fonts {
-		if strings.EqualFold(font, trimmed) {
-			return font, nil
-		}
-	}
-
-	return "", fmt.Errorf("未知字体: %s", input)
-}
 
 func (p *TermConfigPlugin) runThemeSurvey(ctx plugins.CommandContext, cfg *config.Config, themes []string) (bool, string) {
 	// 查找当前主题在列表中的位置
@@ -236,26 +204,6 @@ func (p *TermConfigPlugin) runThemeSurvey(ctx plugins.CommandContext, cfg *confi
 	return p.saveAndPush(ctx, cfg, fmt.Sprintf("✅ 主题已设置为: %s", selectedTheme))
 }
 
-func (p *TermConfigPlugin) resolveThemeSelection(input string, themes []string) (string, error) {
-	// 支持通过编号选择
-	if index, err := strconv.Atoi(input); err == nil {
-		index--
-		if index < 0 || index >= len(themes) {
-			return "", fmt.Errorf("主题编号必须在 1-%d 之间", len(themes))
-		}
-		return themes[index], nil
-	}
-
-	// 支持通过名称选择（不区分大小写）
-	trimmed := strings.TrimSpace(strings.ToLower(input))
-	for _, theme := range themes {
-		if strings.EqualFold(theme, trimmed) {
-			return theme, nil
-		}
-	}
-
-	return "", fmt.Errorf("未知主题: %s，可选: %s", input, strings.Join(themes, "/"))
-}
 
 func (p *TermConfigPlugin) handleFontSize(ctx plugins.CommandContext, args []string) (bool, string) {
 	cfg, err := p.loadConfig(ctx)
@@ -276,7 +224,7 @@ func (p *TermConfigPlugin) handleFontSize(ctx plugins.CommandContext, args []str
 	return p.saveAndPush(ctx, cfg, fmt.Sprintf("✅ 字号已设置为: %d", size))
 }
 
-func (p *TermConfigPlugin) handleTheme(ctx plugins.CommandContext, args []string) (bool, string) {
+func (p *TermConfigPlugin) handleTheme(ctx plugins.CommandContext, _ []string) (bool, string) {
 	cfg, err := p.loadConfig(ctx)
 	if err != nil {
 		return false, fmt.Sprintf("❌ 加载配置失败: %v", err)
@@ -285,20 +233,8 @@ func (p *TermConfigPlugin) handleTheme(ctx plugins.CommandContext, args []string
 	available := config.AvailableThemes()
 	sort.Strings(available)
 
-	if len(args) == 0 {
-		// 交互式选择主题
-		return p.runThemeSurvey(ctx, cfg, available)
-	}
-
-	// 通过参数选择主题（支持编号或名称）
-	input := strings.Join(args, " ")
-	selectedTheme, err := p.resolveThemeSelection(input, available)
-	if err != nil {
-		return false, err.Error()
-	}
-
-	cfg.Terminal.Theme = selectedTheme
-	return p.saveAndPush(ctx, cfg, fmt.Sprintf("✅ 主题已设置为: %s", selectedTheme))
+	// 只支持交互式选择
+	return p.runThemeSurvey(ctx, cfg, available)
 }
 
 func (p *TermConfigPlugin) handleOpacity(ctx plugins.CommandContext, args []string) (bool, string) {
