@@ -4,28 +4,17 @@ import (
 	"fmt"
 
 	"terminal-client/internal/plugins"
-	builtininfo "terminal-client/internal/plugins/builtin/info"
-	builtinTermconfig "terminal-client/internal/plugins/builtin/termconfig"
+	"terminal-client/internal/plugins/register"
 )
 
-// BuildPluginManager constructs the plugin manager with built-in plugins.
+// BuildPluginManager constructs the plugin manager with dynamically discovered plugins.
 func BuildPluginManager() (*plugins.Manager, error) {
 	manager := plugins.NewManager()
 
-	termConfigPlugin, err := builtinTermconfig.New()
-	if err != nil {
-		return nil, fmt.Errorf("加载 termconfig 插件失败: %w", err)
-	}
-	if err := manager.Register(termConfigPlugin); err != nil {
-		return nil, fmt.Errorf("注册 termconfig 插件失败: %w", err)
-	}
+	register.Register()
 
-	infoPlugin, err := builtininfo.New(manager)
-	if err != nil {
-		return nil, fmt.Errorf("加载 info 插件失败: %w", err)
-	}
-	if err := manager.Register(infoPlugin); err != nil {
-		return nil, fmt.Errorf("注册 info 插件失败: %w", err)
+	if err := plugins.LoadAll(manager); err != nil {
+		return nil, fmt.Errorf("加载插件失败: %w", err)
 	}
 
 	return manager, nil

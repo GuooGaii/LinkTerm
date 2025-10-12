@@ -133,92 +133,46 @@ func (p *TermConfigPlugin) Execute(ctx plugins.CommandContext, args []string) (b
 	}
 }
 
-func (p *TermConfigPlugin) handleFont(ctx plugins.CommandContext, _ []string) (bool, string) {
+func (p *TermConfigPlugin) handleFont(ctx plugins.CommandContext, args []string) (bool, string) {
 	cfg, err := p.loadConfig(ctx)
 	if err != nil {
 		return false, fmt.Sprintf("❌ 加载配置失败: %v", err)
 	}
 
-	fonts := config.AvailableFonts()
+	sortedFonts := getSortedFonts()
+	if len(args) == 0 {
+		choice := ""
+		prompt := &survey.Select{
+			Message: "选择字体",
+			Options: sortedFonts,
+			Default: extractMainFont(cfg.Terminal.FontFamily),
+		}
 
-	// 只支持交互式选择
-	return p.runFontSurvey(ctx, cfg, fonts)
+		if err := survey.AskOne(prompt, &choice); err != nil {
+			return false, fmt.Sprintf("❌ 选择字体失败: %v", err)
+		}
+
+		return p.saveAndPush(ctx, cfg, p.updateFontFamily(cfg, choice))
+	}
+
+	font := args[0]
+	for _, candidate := range sortedFonts {
+		if strings.EqualFold(candidate, font) {
+			return p.saveAndPush(ctx, cfg, p.updateFontFamily(cfg, candidate))
+		}
+	}
+
+	return false, fmt.Sprintf("❌ 未找到字体: %s\n可用字体: %v", font, sortedFonts)
 }
 
-func (p *TermConfigPlugin) runFontSurvey(ctx plugins.CommandContext, cfg *config.Config, fonts []string) (bool, string) {
-	mainFont := extractMainFont(cfg.Terminal.FontFamily)
-	defaultOption := 0
-	for i, font := range fonts {
-		if strings.EqualFold(font, mainFont) {
-			defaultOption = i
-			break
-		}
+func (p *TermConfigPlugin) updateFontFamily(cfg *config.Config, font string) string {
+	if cfg.Terminal == nil {
+		cfg.Terminal = config.CloneTerminal(config.DefaultTerminal())
 	}
 
-	prompt := &survey.Select{
-		Message: "选择终端字体:",
-		Options: fonts,
-		Default: fonts[defaultOption],
-	}
+	cfg.Terminal.FontFamily = fmt.Sprintf("%s, %s", font, config.DefaultTerminal().FontFamily)
 
-	var result string
-	if err := survey.AskOne(prompt, &result); err != nil {
-		return false, "操作已取消"
-	}
-
-	cfg.Terminal.FontFamily = fmt.Sprintf("\"%s\", monospace", result)
-	return p.saveAndPush(ctx, cfg, fmt.Sprintf("✅ 字体已设置为: %s", result))
-}
-
-func (p *TermConfigPlugin) runThemeSurvey(ctx plugins.CommandContext, cfg *config.Config, themes []string) (bool, string) {
-	// 查找当前主题在列表中的位置
-	defaultOption := 0
-	for i, theme := range themes {
-		if strings.EqualFold(theme, cfg.Terminal.Theme) {
-			defaultOption = i
-			break
-		}
-	}
-
-	// 创建主题选项显示，包含预览颜色说明
-	options := make([]string, len(themes))
-	for i, theme := range themes {
-		switch theme {
-		case "dark":
-			options[i] = fmt.Sprintf("%s (深色背景，绿色光标)", theme)
-		case "light":
-			options[i] = fmt.Sprintf("%s (浅色背景，蓝色光标)", theme)
-		case "monokai":
-			options[i] = fmt.Sprintf("%s (经典编程主题，粉红光标)", theme)
-		case "dracula":
-			options[i] = fmt.Sprintf("%s (吸血鬼主题，绿色光标)", theme)
-		default:
-			options[i] = theme
-		}
-	}
-
-	prompt := &survey.Select{
-		Message: "选择终端主题:",
-		Options: options,
-		Default: options[defaultOption],
-	}
-
-	var result string
-	if err := survey.AskOne(prompt, &result); err != nil {
-		return false, "操作已取消"
-	}
-
-	// 从选中的选项中提取主题名称（移除描述部分）
-	selectedTheme := themes[0]
-	for i, opt := range options {
-		if opt == result {
-			selectedTheme = themes[i]
-			break
-		}
-	}
-
-	cfg.Terminal.Theme = selectedTheme
-	return p.saveAndPush(ctx, cfg, fmt.Sprintf("✅ 主题已设置为: %s", selectedTheme))
+	return fmt.Sprintf("✅ 字体已设置为: %s", font)
 }
 
 func (p *TermConfigPlugin) handleFontSize(ctx plugins.CommandContext, args []string) (bool, string) {
@@ -233,24 +187,51 @@ func (p *TermConfigPlugin) handleFontSize(ctx plugins.CommandContext, args []str
 
 	size, err := strconv.Atoi(args[0])
 	if err != nil || size < 8 || size > 48 {
-		return false, "字号必须是 8-48 之间的整数"
+		return false, "字体大小必须是 8-48 之间的数字"
 	}
 
 	cfg.Terminal.FontSize = size
-	return p.saveAndPush(ctx, cfg, fmt.Sprintf("✅ 字号已设置为: %d", size))
+	return p.saveAndPush(ctx, cfg, fmt.Sprintf("✅ 字体大小已设置为: %d", size))
 }
 
-func (p *TermConfigPlugin) handleTheme(ctx plugins.CommandContext, _ []string) (bool, string) {
+func (p *TermConfigPlugin) handleTheme(ctx plugins.CommandContext, args []string) (bool, string) {
 	cfg, err := p.loadConfig(ctx)
 	if err != nil {
 		return false, fmt.Sprintf("❌ 加载配置失败: %v", err)
 	}
 
-	available := config.AvailableThemes()
-	sort.Strings(available)
+	themes := []string{"light", "dark", "dracula", "nord", "monokai"}
+	if len(args) == 0 {
+		choice := ""
+		prompt := &survey.Select{
+			Message: "选择主题",
+			Options: themes,
+			Default: cfg.Terminal.Theme,
+		}
 
-	// 只支持交互式选择
-	return p.runThemeSurvey(ctx, cfg, available)
+		if err := survey.AskOne(prompt, &choice); err != nil {
+			return false, fmt.Sprintf("❌ 选择主题失败: %v", err)
+		}
+		return p.saveAndPush(ctx, cfg, p.updateTheme(cfg, choice))
+	}
+
+	theme := strings.ToLower(args[0])
+	for _, candidate := range themes {
+		if candidate == theme {
+			return p.saveAndPush(ctx, cfg, p.updateTheme(cfg, candidate))
+		}
+	}
+
+	return false, fmt.Sprintf("❌ 未找到主题: %s\n可用主题: %v", theme, themes)
+}
+
+func (p *TermConfigPlugin) updateTheme(cfg *config.Config, theme string) string {
+	if cfg.Terminal == nil {
+		cfg.Terminal = config.CloneTerminal(config.DefaultTerminal())
+	}
+
+	cfg.Terminal.Theme = theme
+	return fmt.Sprintf("✅ 主题已设置为: %s", theme)
 }
 
 func (p *TermConfigPlugin) handleOpacity(ctx plugins.CommandContext, args []string) (bool, string) {
@@ -395,4 +376,43 @@ func extractMainFont(fontFamily string) string {
 	}
 
 	return ""
+}
+
+var defaultFontCandidates = []string{
+	"JetBrains Mono",
+	"Fira Code",
+	"Source Code Pro",
+	"Cascadia Code",
+	"Monaco",
+	"Consolas",
+	"Inconsolata",
+	"Menlo",
+	"Ubuntu Mono",
+	"DejaVu Sans Mono",
+	"IBM Plex Mono",
+}
+
+func getSortedFonts() []string {
+	fontSet := map[string]struct{}{}
+	for _, font := range defaultFontCandidates {
+		trimmed := strings.TrimSpace(font)
+		if trimmed == "" {
+			continue
+		}
+		fontSet[trimmed] = struct{}{}
+	}
+
+	fonts := make([]string, 0, len(fontSet))
+	for font := range fontSet {
+		fonts = append(fonts, font)
+	}
+
+	sort.Strings(fonts)
+	return fonts
+}
+
+func init() {
+	plugins.RegisterFactory("termconfig", func(pm *plugins.Manager) (plugins.Plugin, error) {
+		return New()
+	})
 }

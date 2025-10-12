@@ -200,3 +200,9 @@ func (p *InfoPlugin) getVersionInfo() string {
 项目地址: https://chatnext.ai/terminal
 微信: agentready`
 }
+
+func init() {
+	plugins.RegisterFactory("info", func(pm *plugins.Manager) (plugins.Plugin, error) {
+		return New(pm)
+	})
+}
