@@ -47,7 +47,8 @@ func (p *TermConfigPlugin) Usage() string {
   font                 显示交互式字体选择器
   font <字体名称>      设置字体 (可用编号选择)
   font-size [大小]     设置字号 (8-48)
-  theme [主题]         设置主题 (dark/light/monokai/dracula)
+  theme                显示交互式主题选择器
+  theme <主题>         设置主题 (可用编号选择)
   opacity <透明度>     设置透明度 (0.1-1.0)
   cursor [on|off]      开关光标闪烁
   line-height <行高>   设置行高 (1.0-2.0)
@@ -59,8 +60,10 @@ func (p *TermConfigPlugin) Usage() string {
   termconfig font                  # 交互式选择字体
   termconfig font "JetBrains Mono"
   termconfig font 2
-  termconfig font-size 16
+  termconfig theme                 # 交互式选择主题
   termconfig theme dark
+  termconfig theme 1
+  termconfig font-size 16
   termconfig reset`
 }
 
@@ -182,6 +185,78 @@ func (p *TermConfigPlugin) resolveFontSelection(input string, fonts []string) (s
 	return "", fmt.Errorf("未知字体: %s", input)
 }
 
+func (p *TermConfigPlugin) runThemeSurvey(ctx plugins.CommandContext, cfg *config.Config, themes []string) (bool, string) {
+	// 查找当前主题在列表中的位置
+	defaultOption := 0
+	for i, theme := range themes {
+		if strings.EqualFold(theme, cfg.Terminal.Theme) {
+			defaultOption = i
+			break
+		}
+	}
+
+	// 创建主题选项显示，包含预览颜色说明
+	options := make([]string, len(themes))
+	for i, theme := range themes {
+		switch theme {
+		case "dark":
+			options[i] = fmt.Sprintf("%s (深色背景，绿色光标)", theme)
+		case "light":
+			options[i] = fmt.Sprintf("%s (浅色背景，蓝色光标)", theme)
+		case "monokai":
+			options[i] = fmt.Sprintf("%s (经典编程主题，粉红光标)", theme)
+		case "dracula":
+			options[i] = fmt.Sprintf("%s (吸血鬼主题，绿色光标)", theme)
+		default:
+			options[i] = theme
+		}
+	}
+
+	prompt := &survey.Select{
+		Message: "选择终端主题:",
+		Options: options,
+		Default: options[defaultOption],
+	}
+
+	var result string
+	if err := survey.AskOne(prompt, &result); err != nil {
+		return false, "操作已取消"
+	}
+
+	// 从选中的选项中提取主题名称（移除描述部分）
+	selectedTheme := themes[0]
+	for i, opt := range options {
+		if opt == result {
+			selectedTheme = themes[i]
+			break
+		}
+	}
+
+	cfg.Terminal.Theme = selectedTheme
+	return p.saveAndPush(ctx, cfg, fmt.Sprintf("✅ 主题已设置为: %s", selectedTheme))
+}
+
+func (p *TermConfigPlugin) resolveThemeSelection(input string, themes []string) (string, error) {
+	// 支持通过编号选择
+	if index, err := strconv.Atoi(input); err == nil {
+		index--
+		if index < 0 || index >= len(themes) {
+			return "", fmt.Errorf("主题编号必须在 1-%d 之间", len(themes))
+		}
+		return themes[index], nil
+	}
+
+	// 支持通过名称选择（不区分大小写）
+	trimmed := strings.TrimSpace(strings.ToLower(input))
+	for _, theme := range themes {
+		if strings.EqualFold(theme, trimmed) {
+			return theme, nil
+		}
+	}
+
+	return "", fmt.Errorf("未知主题: %s，可选: %s", input, strings.Join(themes, "/"))
+}
+
 func (p *TermConfigPlugin) handleFontSize(ctx plugins.CommandContext, args []string) (bool, string) {
 	cfg, err := p.loadConfig(ctx)
 	if err != nil {
@@ -211,16 +286,19 @@ func (p *TermConfigPlugin) handleTheme(ctx plugins.CommandContext, args []string
 	sort.Strings(available)
 
 	if len(args) == 0 {
-		return false, fmt.Sprintf("当前主题: %s\n用法: termconfig theme <%s>", cfg.Terminal.Theme, strings.Join(available, "|"))
+		// 交互式选择主题
+		return p.runThemeSurvey(ctx, cfg, available)
 	}
 
-	theme := strings.ToLower(args[0])
-	if !config.HasTheme(theme) {
-		return false, fmt.Sprintf("未知主题: %s，可选: %s", theme, strings.Join(available, "/"))
+	// 通过参数选择主题（支持编号或名称）
+	input := strings.Join(args, " ")
+	selectedTheme, err := p.resolveThemeSelection(input, available)
+	if err != nil {
+		return false, err.Error()
 	}
 
-	cfg.Terminal.Theme = theme
-	return p.saveAndPush(ctx, cfg, fmt.Sprintf("✅ 主题已设置为: %s", theme))
+	cfg.Terminal.Theme = selectedTheme
+	return p.saveAndPush(ctx, cfg, fmt.Sprintf("✅ 主题已设置为: %s", selectedTheme))
 }
 
 func (p *TermConfigPlugin) handleOpacity(ctx plugins.CommandContext, args []string) (bool, string) {
