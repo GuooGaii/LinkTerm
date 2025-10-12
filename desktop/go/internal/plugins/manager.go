@@ -264,11 +264,18 @@ func (pm *Manager) ListPlugins() []PluginMetadata {
 	metadata := make([]PluginMetadata, 0, len(pm.plugins))
 	for _, plugin := range pm.plugins {
 		name := plugin.Name()
+		var persistent map[string]interface{}
+		if provider, ok := plugin.(interface {
+			PersistentState() map[string]interface{}
+		}); ok {
+			persistent = provider.PersistentState()
+		}
 		metadata = append(metadata, PluginMetadata{
 			Name:         name,
 			Description:  plugin.Description(),
 			Version:      plugin.Version(),
 			Dependencies: plugin.Dependencies(),
+			Persistent:   persistent,
 			Enabled:      pm.enabledPlugins[name],
 		})
 	}

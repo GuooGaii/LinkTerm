@@ -3,6 +3,7 @@ package plugins
 import (
 	"context"
 	"fmt"
+	"sync"
 
 	"terminal-client/internal/config"
 )
@@ -69,13 +70,14 @@ type Event struct {
 
 // PluginMetadata summarises a plugin for listing purposes.
 type PluginMetadata struct {
-	Name         string            `json:"name"`
-	Description  string            `json:"description"`
-	Version      string            `json:"version"`
-	Author       string            `json:"author"`
-	Dependencies []string          `json:"dependencies"`
-	Config       map[string]string `json:"config"`
-	Enabled      bool              `json:"enabled"`
+	Name         string                 `json:"name"`
+	Description  string                 `json:"description"`
+	Version      string                 `json:"version"`
+	Author       string                 `json:"author"`
+	Dependencies []string               `json:"dependencies"`
+	Config       map[string]string      `json:"config"`
+	Persistent   map[string]interface{} `json:"persistent,omitempty"`
+	Enabled      bool                   `json:"enabled"`
 }
 
 // PluginError wraps underlying plugin failures.
@@ -107,9 +109,12 @@ func NewPluginError(plugin, message string, err error) *PluginError {
 
 // BasePlugin offers a reusable implementation scaffold.
 type BasePlugin struct {
-	name        string
-	description string
-	version     string
+	name         string
+	description  string
+	version      string
+	metadataPath string
+	metadataMu   sync.RWMutex
+	metadata     *FileMetadata
 }
 
 // NewBasePlugin instantiates a helper implementing the basic Plugin contract.
@@ -119,6 +124,31 @@ func NewBasePlugin(name, description, version string) *BasePlugin {
 		description: description,
 		version:     version,
 	}
+}
+
+// NewBasePluginFromMetadata loads plugin details from a metadata.json file.
+func NewBasePluginFromMetadata(metadataPath string) (*BasePlugin, error) {
+	if metadataPath == "" {
+		return nil, fmt.Errorf("metadata path cannot be empty")
+	}
+
+	metadata, err := LoadMetadata(metadataPath)
+	if err != nil {
+		return nil, err
+	}
+
+	return &BasePlugin{
+		name:         metadata.Name,
+		description:  metadata.Description,
+		version:      metadata.Version,
+		metadataPath: metadataPath,
+		metadata: &FileMetadata{
+			Name:        metadata.Name,
+			Version:     metadata.Version,
+			Description: metadata.Description,
+			Persistent:  clonePersistentState(metadata.Persistent),
+		},
+	}, nil
 }
 
 func (p *BasePlugin) Name() string {
@@ -147,4 +177,63 @@ func (p *BasePlugin) Stop(context.Context) error {
 
 func (p *BasePlugin) Dependencies() []string {
 	return []string{}
+}
+
+// MetadataPath returns the file path storing metadata, if any.
+func (p *BasePlugin) MetadataPath() string {
+	p.metadataMu.RLock()
+	defer p.metadataMu.RUnlock()
+	return p.metadataPath
+}
+
+// PersistentState exposes a copy of the plugin's persistent variables.
+func (p *BasePlugin) PersistentState() map[string]interface{} {
+	p.metadataMu.RLock()
+	defer p.metadataMu.RUnlock()
+	if p.metadata == nil {
+		return map[string]interface{}{}
+	}
+	return clonePersistentState(p.metadata.Persistent)
+}
+
+// UpdatePersistentState merges the provided values into the metadata file.
+func (p *BasePlugin) UpdatePersistentState(updates map[string]interface{}) error {
+	if len(updates) == 0 {
+		return nil
+	}
+
+	p.metadataMu.Lock()
+	defer p.metadataMu.Unlock()
+
+	if p.metadataPath == "" {
+		return fmt.Errorf("plugin %s has no metadata path configured", p.name)
+	}
+
+	if p.metadata == nil {
+		p.metadata = &FileMetadata{
+			Name:        p.name,
+			Version:     p.version,
+			Description: p.description,
+			Persistent:  map[string]interface{}{},
+		}
+	}
+
+	if p.metadata.Persistent == nil {
+		p.metadata.Persistent = map[string]interface{}{}
+	}
+
+	for key, value := range updates {
+		if value == nil {
+			delete(p.metadata.Persistent, key)
+			continue
+		}
+		p.metadata.Persistent[key] = value
+	}
+
+	// Keep metadata descriptive fields in sync with the plugin definition.
+	p.metadata.Name = p.name
+	p.metadata.Version = p.version
+	p.metadata.Description = p.description
+
+	return SaveMetadata(p.metadataPath, p.metadata)
 }

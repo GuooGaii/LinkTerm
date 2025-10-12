@@ -1,4 +1,4 @@
-package builtin
+package termconfig
 
 import (
 	"context"
@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -17,20 +19,36 @@ import (
 	"terminal-client/internal/plugins"
 )
 
+const metadataFile = "metadata.json"
+
+func resolveMetadataPath() (string, error) {
+	_, file, _, ok := runtime.Caller(0)
+	if !ok {
+		return "", fmt.Errorf("cannot determine plugin source directory")
+	}
+	return filepath.Join(filepath.Dir(file), metadataFile), nil
+}
+
 // TermConfigPlugin 管理终端外观和行为设置的命令插件。
 type TermConfigPlugin struct {
 	*plugins.BasePlugin
 }
 
-// NewTermConfigPlugin 创建 termconfig 插件。
-func NewTermConfigPlugin() *TermConfigPlugin {
-	return &TermConfigPlugin{
-		BasePlugin: plugins.NewBasePlugin(
-			"termconfig",
-			"终端配置命令 - 管理终端外观和行为设置",
-			"1.0.0",
-		),
+// New 创建 termconfig 插件。
+func New() (*TermConfigPlugin, error) {
+	metadataPath, err := resolveMetadataPath()
+	if err != nil {
+		return nil, fmt.Errorf("locate metadata: %w", err)
 	}
+
+	base, err := plugins.NewBasePluginFromMetadata(metadataPath)
+	if err != nil {
+		return nil, fmt.Errorf("load metadata: %w", err)
+	}
+
+	return &TermConfigPlugin{
+		BasePlugin: base,
+	}, nil
 }
 
 func (p *TermConfigPlugin) CommandName() string {
@@ -152,7 +170,6 @@ func (p *TermConfigPlugin) runFontSurvey(ctx plugins.CommandContext, cfg *config
 	return p.saveAndPush(ctx, cfg, fmt.Sprintf("✅ 字体已设置为: %s", result))
 }
 
-
 func (p *TermConfigPlugin) runThemeSurvey(ctx plugins.CommandContext, cfg *config.Config, themes []string) (bool, string) {
 	// 查找当前主题在列表中的位置
 	defaultOption := 0
@@ -203,7 +220,6 @@ func (p *TermConfigPlugin) runThemeSurvey(ctx plugins.CommandContext, cfg *confi
 	cfg.Terminal.Theme = selectedTheme
 	return p.saveAndPush(ctx, cfg, fmt.Sprintf("✅ 主题已设置为: %s", selectedTheme))
 }
-
 
 func (p *TermConfigPlugin) handleFontSize(ctx plugins.CommandContext, args []string) (bool, string) {
 	cfg, err := p.loadConfig(ctx)

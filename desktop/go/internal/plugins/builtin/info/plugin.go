@@ -1,13 +1,24 @@
-package builtin
+package info
 
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 	"runtime"
 	"strings"
 
 	"terminal-client/internal/plugins"
 )
+
+const metadataFile = "metadata.json"
+
+func resolveMetadataPath() (string, error) {
+	_, file, _, ok := runtime.Caller(0)
+	if !ok {
+		return "", fmt.Errorf("cannot determine plugin source directory")
+	}
+	return filepath.Join(filepath.Dir(file), metadataFile), nil
+}
 
 // InfoPlugin exposes runtime and plugin details.
 type InfoPlugin struct {
@@ -15,16 +26,22 @@ type InfoPlugin struct {
 	pluginManager *plugins.Manager
 }
 
-// NewInfoPlugin constructs the info command plugin.
-func NewInfoPlugin(pm *plugins.Manager) *InfoPlugin {
-	return &InfoPlugin{
-		BasePlugin: plugins.NewBasePlugin(
-			"info",
-			"显示系统和插件信息",
-			"1.0.0",
-		),
-		pluginManager: pm,
+// New constructs the info command plugin.
+func New(pm *plugins.Manager) (*InfoPlugin, error) {
+	path, err := resolveMetadataPath()
+	if err != nil {
+		return nil, fmt.Errorf("locate metadata: %w", err)
 	}
+
+	base, err := plugins.NewBasePluginFromMetadata(path)
+	if err != nil {
+		return nil, fmt.Errorf("load metadata: %w", err)
+	}
+
+	return &InfoPlugin{
+		BasePlugin:    base,
+		pluginManager: pm,
+	}, nil
 }
 
 func (p *InfoPlugin) CommandName() string {
@@ -139,6 +156,12 @@ func (p *InfoPlugin) listPlugins() string {
 		sb.WriteString(fmt.Sprintf("   %s\n", metadata.Description))
 		if len(metadata.Dependencies) > 0 {
 			sb.WriteString(fmt.Sprintf("   依赖: %v\n", metadata.Dependencies))
+		}
+		if len(metadata.Persistent) > 0 {
+			sb.WriteString("   持久化变量:\n")
+			for key, value := range metadata.Persistent {
+				sb.WriteString(fmt.Sprintf("     - %s: %v\n", key, value))
+			}
 		}
 		sb.WriteString("\n")
 	}
