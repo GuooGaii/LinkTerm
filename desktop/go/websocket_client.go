@@ -344,12 +344,6 @@ func (c *WebSocketClient) handleSystemMessage(data json.RawMessage) {
             }
         }
 
-	case SysCmdClear:
-		// 清屏
-		if err := c.writeToSession(defaultTerminalID, []byte("\x1b[2J\x1b[H")); err != nil {
-			log.Printf("清屏失败: %v", err)
-		}
-
 	case SysCmdRestart:
 		c.restartSession(defaultTerminalID)
 
@@ -368,42 +362,29 @@ func (c *WebSocketClient) handleSystemMessage(data json.RawMessage) {
             }
         }
 
-	case "ctrl_c":
-		if err := c.writeToSession(defaultTerminalID, []byte("\x03")); err != nil {
-			log.Printf("发送 Ctrl+C 失败: %v", err)
-		}
-
 	default:
 		c.handleSystemCommand(sysData.Cmd, defaultTerminalID)
 	}
 }
 
 func (c *WebSocketClient) handleSystemCommand(command string, terminalID string) {
-	targetID := c.normalizeTerminalID(terminalID)
+    targetID := c.normalizeTerminalID(terminalID)
 
-	switch command {
-	case "open_terminal":
-		if _, err := c.ensureSession(targetID); err != nil {
-			log.Printf("创建终端 %s 失败: %v", targetID, err)
-		}
-	case "close_terminal":
-		c.closeSession(targetID)
-	case "restart":
-		log.Printf("🔄 重启终端进程: %s", targetID)
-		c.restartSession(targetID)
-	case "clear":
-		if err := c.writeToSession(targetID, []byte("\x1b[2J\x1b[H")); err != nil {
-			log.Printf("清屏失败 [%s]: %v", targetID, err)
-		}
-	case "ctrl_c":
-		if err := c.writeToSession(targetID, []byte("\x03")); err != nil {
-			log.Printf("发送 Ctrl+C 失败 [%s]: %v", targetID, err)
-		}
-	default:
-		if !c.handleCommand(command, targetID) {
-			log.Printf("未知系统命令: %s", command)
-		}
-	}
+    switch command {
+    case "open_terminal":
+        if _, err := c.ensureSession(targetID); err != nil {
+            log.Printf("创建终端 %s 失败: %v", targetID, err)
+        }
+    case "close_terminal":
+        c.closeSession(targetID)
+    case "restart":
+        log.Printf("🔄 重启终端进程: %s", targetID)
+        c.restartSession(targetID)
+    default:
+        if !c.handleCommand(command, targetID) {
+            log.Printf("未知系统命令: %s", command)
+        }
+    }
 }
 
 func (c *WebSocketClient) writeToSession(terminalID string, data []byte) error {

@@ -26,14 +26,13 @@ type SystemData struct {
 
 // 系统命令类型
 const (
-	SysCmdInit     = "init"     // 初始化
-	SysCmdResize   = "resize"   // 调整大小
-	SysCmdConfig   = "config"   // 配置更新
-	SysCmdClear    = "clear"    // 清屏
-	SysCmdRestart  = "restart"  // 重启
-	SysCmdPing     = "ping"     // 心跳
-	SysCmdPong     = "pong"     // 心跳响应
-	SysCmdRegister = "register" // 注册设备
+	SysCmdInit      = "init"      // 初始化
+	SysCmdResize    = "resize"    // 按尺寸调整
+	SysCmdConfig    = "config"    // 配置更新
+	SysCmdRestart   = "restart"   // 重启
+	SysCmdPing      = "ping"      // 心跳
+	SysCmdPong      = "pong"      // 心跳响应
+	SysCmdRegister  = "register"  // 注册设备
 	SysCmdConnected = "connected" // 设备已连接
 )
 
