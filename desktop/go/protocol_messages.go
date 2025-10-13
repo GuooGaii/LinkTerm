@@ -1,6 +1,10 @@
 package main
 
-import "encoding/json"
+import (
+	"encoding/json"
+
+	"terminal-client/types"
+)
 
 // Message 简化的消息结构 - 只有3种类型
 type Message struct {
@@ -110,7 +114,7 @@ func NewConfig(cfg *TerminalConfig) *Message {
 		FontFamily:  cfg.FontFamily,
 		FontSize:    cfg.FontSize,
 		Theme:       cfg.Theme,
-		ThemeColors: ThemeColors(cfg.Theme),
+		ThemeColors: types.ThemeColors(cfg.Theme),
 		Opacity:     cfg.Opacity,
 		CursorBlink: cfg.CursorBlink,
 		LineHeight:  cfg.LineHeight,
