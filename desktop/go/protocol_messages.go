@@ -1,14 +1,14 @@
 package main
 
 import (
-    "encoding/json"
-    "terminal-client/types"
+	"encoding/json"
+	"terminal-client/types"
 )
 
 // Message 简化的消息结构 - 只有3种类型
 type Message struct {
-    Type string          `json:"type"` // "input", "output", "system"
-    Data json.RawMessage `json:"data"`
+	Type string          `json:"type"` // "input", "output", "system"
+	Data json.RawMessage `json:"data"`
 }
 
 // 消息类型常量
@@ -20,8 +20,8 @@ const (
 
 // SystemData 系统消息数据
 type SystemData struct {
-    Cmd  string          `json:"cmd"`            // 命令类型
-    Args json.RawMessage `json:"args,omitempty"` // 命令参数（保持原始 JSON）
+	Cmd  string          `json:"cmd"`            // 命令类型
+	Args json.RawMessage `json:"args,omitempty"` // 命令参数（保持原始 JSON）
 }
 
 // 系统命令类型
@@ -63,17 +63,6 @@ type RegisterArgs struct {
 type InitArgs struct {
 	Cols int `json:"cols"`
 	Rows int `json:"rows"`
-}
-
-// (ConnectedArgs removed: unused)
-
-// (NewMessage/ToJSON/ParseMessage removed: unused)
-
-// 快捷创建函数
-func NewInput(data string) *Message {
-	// 将字符串编码为 JSON 原始消息
-	b, _ := json.Marshal(data)
-	return &Message{Type: TypeInput, Data: b}
 }
 
 func NewOutput(data string) *Message {
