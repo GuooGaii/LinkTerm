@@ -1,16 +1,16 @@
 package main
 
 import (
-	"encoding/json"
-	"fmt"
-	"log"
-	"net/url"
-	"os"
-	"strings"
-	"sync"
-	"time"
+    "encoding/json"
+    "fmt"
+    "log"
+    "net/url"
+    "os"
+    "strings"
+    "sync"
+    "time"
 
-	"github.com/gorilla/websocket"
+    "github.com/gorilla/websocket"
 )
 
 const defaultTerminalID = "default"
@@ -295,57 +295,54 @@ func (c *WebSocketClient) handleMessages() {
 }
 
 func (c *WebSocketClient) handleMessage(msg *Message) {
-	switch msg.Type {
-	case TypeInput:
-		if data, ok := msg.Data.(string); ok {
-			if err := c.writeToSession(defaultTerminalID, []byte(data)); err != nil {
-				log.Printf("写入终端失败: %v", err)
-			}
-		}
+    switch msg.Type {
+    case TypeInput:
+        var data string
+        if err := json.Unmarshal(msg.Data, &data); err != nil {
+            log.Printf("解析输入消息失败: %v", err)
+            return
+        }
+        if err := c.writeToSession(defaultTerminalID, []byte(data)); err != nil {
+            log.Printf("写入终端失败: %v", err)
+        }
 
-	case TypeSystem:
-		c.handleSystemMessage(msg.Data)
+    case TypeSystem:
+        c.handleSystemMessage(msg.Data)
 
 	default:
 		log.Printf("未知消息类型: %s", msg.Type)
 	}
 }
 
-func (c *WebSocketClient) handleSystemMessage(data interface{}) {
-	// 尝试解析为结构化数据
-	jsonData, _ := json.Marshal(data)
-	var sysData SystemData
-	if err := json.Unmarshal(jsonData, &sysData); err != nil {
-		// 可能是字符串格式
-		if str, ok := data.(string); ok {
-			sysData.Cmd = str
-		} else {
-			log.Printf("解析系统消息失败: %v", err)
-			return
-		}
-	}
+func (c *WebSocketClient) handleSystemMessage(data json.RawMessage) {
+    var sysData SystemData
+    if err := json.Unmarshal(data, &sysData); err != nil {
+        log.Printf("解析系统消息失败: %v", err)
+        return
+    }
 
 	switch sysData.Cmd {
-	case SysCmdResize:
-		// 调整大小
-		if args, ok := sysData.Args.(map[string]interface{}); ok {
-			cols := int(args["cols"].(float64))
-			rows := int(args["rows"].(float64))
+    case SysCmdResize:
+        // 调整大小
+        var args ResizeArgs
+        if err := json.Unmarshal(sysData.Args, &args); err != nil {
+            log.Printf("解析调整大小参数失败: %v", err)
+            return
+        }
 
-			sess, err := c.ensureSession(defaultTerminalID)
-			if err != nil {
-				log.Printf("确保终端会话失败: %v", err)
-				return
-			}
+        sess, err := c.ensureSession(defaultTerminalID)
+        if err != nil {
+            log.Printf("确保终端会话失败: %v", err)
+            return
+        }
 
-			if sess.manager != nil && cols > 0 && rows > 0 {
-				if err := sess.manager.Resize(cols, rows); err != nil {
-					log.Printf("调整终端尺寸失败: %v", err)
-				} else {
-					log.Printf("🔄 终端尺寸调整为: %dx%d", cols, rows)
-				}
-			}
-		}
+        if sess.manager != nil && args.Cols > 0 && args.Rows > 0 {
+            if err := sess.manager.Resize(args.Cols, args.Rows); err != nil {
+                log.Printf("调整终端尺寸失败: %v", err)
+            } else {
+                log.Printf("🔄 终端尺寸调整为: %dx%d", args.Cols, args.Rows)
+            }
+        }
 
 	case SysCmdClear:
 		// 清屏
@@ -359,17 +356,17 @@ func (c *WebSocketClient) handleSystemMessage(data interface{}) {
 	case SysCmdPing:
 		c.send(NewSystem(SysCmdPong, nil))
 
-	case SysCmdConnected:
-		// 设备连接通知
-		if args, ok := sysData.Args.(map[string]interface{}); ok {
-			if deviceType, ok := args["deviceType"].(string); ok && deviceType == "web" {
-				log.Println("🌐 网页端已连接")
-				// 网页端连接后，发送当前配置
-				if c.config != nil && c.config.Terminal != nil {
-					c.SendConfigUpdate(c.config.Terminal)
-				}
-			}
-		}
+    case SysCmdConnected:
+        // 设备连接通知
+        var args RegisterArgs
+        if err := json.Unmarshal(sysData.Args, &args); err == nil {
+            if args.DeviceType == "web" {
+                log.Println("🌐 网页端已连接")
+                if c.config != nil && c.config.Terminal != nil {
+                    c.SendConfigUpdate(c.config.Terminal)
+                }
+            }
+        }
 
 	case "ctrl_c":
 		if err := c.writeToSession(defaultTerminalID, []byte("\x03")); err != nil {

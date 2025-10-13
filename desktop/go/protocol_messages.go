@@ -1,13 +1,14 @@
 package main
 
 import (
+    "encoding/json"
     "terminal-client/types"
 )
 
 // Message 简化的消息结构 - 只有3种类型
 type Message struct {
-	Type string      `json:"type"` // "input", "output", "system"
-	Data interface{} `json:"data"`
+    Type string          `json:"type"` // "input", "output", "system"
+    Data json.RawMessage `json:"data"`
 }
 
 // 消息类型常量
@@ -19,8 +20,8 @@ const (
 
 // SystemData 系统消息数据
 type SystemData struct {
-	Cmd  string      `json:"cmd"`            // 命令类型
-	Args interface{} `json:"args,omitempty"` // 命令参数
+    Cmd  string          `json:"cmd"`            // 命令类型
+    Args json.RawMessage `json:"args,omitempty"` // 命令参数（保持原始 JSON）
 }
 
 // 系统命令类型
@@ -71,18 +72,26 @@ type InitArgs struct {
 
 // 快捷创建函数
 func NewInput(data string) *Message {
-	return &Message{Type: TypeInput, Data: data}
+	// 将字符串编码为 JSON 原始消息
+	b, _ := json.Marshal(data)
+	return &Message{Type: TypeInput, Data: b}
 }
 
 func NewOutput(data string) *Message {
-	return &Message{Type: TypeOutput, Data: data}
+	b, _ := json.Marshal(data)
+	return &Message{Type: TypeOutput, Data: b}
 }
 
 func NewSystem(cmd string, args interface{}) *Message {
-	return &Message{
-		Type: TypeSystem,
-		Data: SystemData{Cmd: cmd, Args: args},
+	var raw json.RawMessage
+	if args != nil {
+		if b, err := json.Marshal(args); err == nil {
+			raw = b
+		}
 	}
+	// 将 SystemData 编码为原始 JSON 放入 Message.Data
+	b, _ := json.Marshal(SystemData{Cmd: cmd, Args: raw})
+	return &Message{Type: TypeSystem, Data: b}
 }
 
 func NewResize(cols, rows int) *Message {
