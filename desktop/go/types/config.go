@@ -2,7 +2,7 @@ package types
 
 import "strings"
 
-// Config holds the persisted application configuration.
+// Config 保存持久化的应用程序配置。
 type Config struct {
 	ServerURL string          `json:"serverUrl"`
 	WebURL    string          `json:"webUrl"`
@@ -10,7 +10,7 @@ type Config struct {
 	Terminal  *TerminalConfig `json:"terminal,omitempty"`
 }
 
-// TerminalConfig controls the behaviour and appearance of the pseudo terminal.
+// TerminalConfig 控制伪终端的行为和外观。
 type TerminalConfig struct {
 	FontFamily  string  `json:"fontFamily"`
 	FontSize    int     `json:"fontSize"`
@@ -21,6 +21,7 @@ type TerminalConfig struct {
 }
 
 var (
+	// 默认终端配置
 	defaultTerminalConfig = TerminalConfig{
 		FontFamily:  "\"Cascadia Code\", \"JetBrains Mono\", \"Fira Code\", monospace",
 		FontSize:    14,
@@ -30,6 +31,7 @@ var (
 		LineHeight:  1.2,
 	}
 
+	// 可用主题配色
 	availableThemes = map[string]map[string]string{
 		"dark": {
 			"background": "#0a0a0a",
@@ -53,6 +55,7 @@ var (
 		},
 	}
 
+	// 可用字体族
 	availableFonts = []string{
 		"Cascadia Code",
 		"JetBrains Mono",
@@ -67,19 +70,18 @@ var (
 	}
 )
 
-// CloneTerminal copies the provided terminal configuration.
+// CloneTerminal 复制提供的终端配置。
 func CloneTerminal(cfg TerminalConfig) *TerminalConfig {
 	copy := cfg
 	return &copy
 }
 
-// DefaultTerminal returns the default terminal configuration.
+// DefaultTerminal 返回默认的终端配置。
 func DefaultTerminal() TerminalConfig {
 	return defaultTerminalConfig
 }
 
-// NormalizeTerminal cleans up a potentially incomplete terminal configuration and
-// fills missing values using defaults.
+// NormalizeTerminal 清理可能不完整的终端配置，并使用默认值填充缺失项。
 func NormalizeTerminal(cfg *TerminalConfig) *TerminalConfig {
 	result := defaultTerminalConfig
 	if cfg != nil {
@@ -103,7 +105,7 @@ func NormalizeTerminal(cfg *TerminalConfig) *TerminalConfig {
 	return CloneTerminal(result)
 }
 
-// ThemeColors returns the palette for the given theme.
+// ThemeColors 返回指定主题的调色板。
 func ThemeColors(theme string) map[string]string {
 	if colors, ok := availableThemes[theme]; ok {
 		return colors
@@ -111,7 +113,7 @@ func ThemeColors(theme string) map[string]string {
 	return availableThemes["dark"]
 }
 
-// AvailableThemes returns the configured theme names.
+// AvailableThemes 返回已配置的主题名称。
 func AvailableThemes() []string {
 	names := make([]string, 0, len(availableThemes))
 	for name := range availableThemes {
@@ -120,13 +122,13 @@ func AvailableThemes() []string {
 	return names
 }
 
-// HasTheme reports whether the theme exists.
+// HasTheme 检查主题是否存在。
 func HasTheme(theme string) bool {
 	_, ok := availableThemes[theme]
 	return ok
 }
 
-// AvailableFonts returns the predefined font families.
+// AvailableFonts 返回预定义的字体族列表。
 func AvailableFonts() []string {
 	return availableFonts
 }

@@ -9,7 +9,7 @@ import (
 	"github.com/aymanbagabas/go-pty"
 )
 
-// PTYManager orchestrates the pseudo terminal lifecycle.
+// PTYManager 协调伪终端（Pseudo Terminal, PTY）的生命周期管理。
 type PTYManager struct {
 	pty    pty.Pty
 	cmd    *pty.Cmd
@@ -17,7 +17,7 @@ type PTYManager struct {
 	closed chan struct{}
 }
 
-// NewPTYManager constructs a PTY manager instance.
+// NewPTYManager 构造一个新的PTY管理器实例。
 func NewPTYManager() (*PTYManager, error) {
 	return &PTYManager{
 		output: make(chan []byte, 100),
@@ -25,7 +25,7 @@ func NewPTYManager() (*PTYManager, error) {
 	}, nil
 }
 
-// Start spawns the underlying shell and begins streaming output.
+// Start 启动底层 shell 并开始流式传输输出。
 func (m *PTYManager) Start() error {
 	var shell string
 	if runtime.GOOS == "windows" {
@@ -63,6 +63,7 @@ func (m *PTYManager) Start() error {
 	return nil
 }
 
+// readOutput 循环读取PTY的输出，把内容写到output通道中。
 func (m *PTYManager) readOutput() {
 	buf := make([]byte, 4096)
 	for {
@@ -93,18 +94,19 @@ func (m *PTYManager) readOutput() {
 	}
 }
 
+// waitForExit 等待 shell 进程退出并关闭closed通道。
 func (m *PTYManager) waitForExit() {
 	m.cmd.Wait()
 	close(m.closed)
 }
 
-// Write forwards input to the PTY.
+// Write 将输入数据转发到PTY。
 func (m *PTYManager) Write(data []byte) error {
 	_, err := m.pty.Write(data)
 	return err
 }
 
-// Resize adjusts the terminal size.
+// Resize 调整终端窗口大小。
 func (m *PTYManager) Resize(cols, rows int) error {
 	if m.pty != nil {
 		return m.pty.Resize(cols, rows)
@@ -112,7 +114,7 @@ func (m *PTYManager) Resize(cols, rows int) error {
 	return nil
 }
 
-// Close shuts down the PTY session.
+// Close 关闭PTY会话。
 func (m *PTYManager) Close() error {
 	if m.pty != nil {
 		select {
@@ -128,12 +130,12 @@ func (m *PTYManager) Close() error {
 	return nil
 }
 
-// Output streams PTY output data.
+// Output 返回PTY输出数据的通道（只读）。
 func (m *PTYManager) Output() <-chan []byte {
 	return m.output
 }
 
-// Closed signals when the PTY command has terminated.
+// Closed 返回一个信号通道，当PTY命令终止时关闭。
 func (m *PTYManager) Closed() <-chan struct{} {
 	return m.closed
 }

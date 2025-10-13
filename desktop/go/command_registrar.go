@@ -8,14 +8,14 @@ import (
 	"runtime"
 )
 
-// CommandRegistrar manages temporary command registrations for the current session.
+// CommandRegistrar 用于管理当前会话的临时命令注册。
 type CommandRegistrar struct {
-	tempDir     string
-	programPath string
-	commands    []string
+	tempDir     string   // 临时目录路径
+	programPath string   // 程序本身的路径
+	commands    []string // 命令列表
 }
 
-// NewCommandRegistrar builds a new registrar with the provided command list.
+// NewCommandRegistrar 使用提供的命令列表创建一个新的注册器。
 func NewCommandRegistrar(commands []string) *CommandRegistrar {
 	programPath, _ := os.Executable()
 
@@ -25,7 +25,7 @@ func NewCommandRegistrar(commands []string) *CommandRegistrar {
 	}
 }
 
-// Register writes helper wrappers and amends PATH for the current session.
+// Register 写入辅助脚本并为当前会话修改 PATH。
 func (r *CommandRegistrar) Register() error {
 	tempDir, err := os.MkdirTemp("", "terminal-commands-")
 	if err != nil {
@@ -39,6 +39,7 @@ func (r *CommandRegistrar) Register() error {
 	return r.registerCommands("", unixWrapperTemplate, ":")
 }
 
+// registerCommands 为所有命令写入脚本，并修改 PATH 环境变量。
 func (r *CommandRegistrar) registerCommands(suffix, scriptTemplate, pathSeparator string) error {
 	for _, cmdName := range r.commands {
 		scriptPath := filepath.Join(r.tempDir, cmdName+suffix)
@@ -60,7 +61,7 @@ func (r *CommandRegistrar) registerCommands(suffix, scriptTemplate, pathSeparato
 	return nil
 }
 
-// Unregister cleans up all temporary commands.
+// Unregister 清理所有临时命令。
 func (r *CommandRegistrar) Unregister() {
 	if r.tempDir != "" {
 		if err := os.RemoveAll(r.tempDir); err != nil {

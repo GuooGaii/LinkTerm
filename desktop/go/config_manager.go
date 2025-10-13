@@ -5,26 +5,27 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/google/uuid"
 	"terminal-client/types"
+
+	"github.com/google/uuid"
 )
 
-// ConfigManager provides helpers to work with the configuration file on disk.
+// ConfigManager 提供用于处理磁盘配置文件的辅助方法。
 type ConfigManager struct {
 	path string
 }
 
-// NewConfigManager constructs a configuration manager for the given path.
+// NewConfigManager 为给定路径构造一个配置管理器。
 func NewConfigManager(path string) *ConfigManager {
 	return &ConfigManager{path: path}
 }
 
-// Path returns the configured file path.
+// Path 返回配置的文件路径。
 func (m *ConfigManager) Path() string {
 	return m.path
 }
 
-// Load reads configuration from disk and normalises terminal settings.
+// Load 从磁盘读取配置并标准化终端设置。
 func (m *ConfigManager) Load() (*types.Config, error) {
 	data, err := os.ReadFile(m.path)
 	if err != nil {
@@ -42,6 +43,7 @@ func (m *ConfigManager) Load() (*types.Config, error) {
 		return nil, fmt.Errorf("配置不完整：缺少服务器地址")
 	}
 
+	// 如果需要，生成并保存 DeviceID
 	if EnsureDeviceID(&cfg) {
 		if err := m.Save(&cfg); err != nil {
 			return nil, fmt.Errorf("保存配置失败: %w", err)
@@ -51,7 +53,7 @@ func (m *ConfigManager) Load() (*types.Config, error) {
 	return &cfg, nil
 }
 
-// Save writes configuration back to disk ensuring defaults are present.
+// Save 将配置写回到磁盘，并确保默认值的存在。
 func (m *ConfigManager) Save(cfg *types.Config) error {
 	if cfg.Terminal == nil {
 		cfg.Terminal = types.CloneTerminal(types.DefaultTerminal())
@@ -65,8 +67,8 @@ func (m *ConfigManager) Save(cfg *types.Config) error {
 	return os.WriteFile(m.path, data, 0o644)
 }
 
-// EnsureDeviceID guarantees the configuration carries a device identifier.
-// It returns true when the configuration was mutated.
+// EnsureDeviceID 保证配置包含设备标识符。
+// 如果配置被更改，则返回 true。
 func EnsureDeviceID(cfg *types.Config) bool {
 	if cfg.DeviceID != "" {
 		return false
@@ -75,8 +77,8 @@ func EnsureDeviceID(cfg *types.Config) bool {
 	return true
 }
 
-// CreateConfigWithDeviceID builds a config using supplied endpoints and an optional
-// existing configuration for reusing the DeviceID.
+// CreateConfigWithDeviceID 使用提供的 endpoint 和可选的
+// 已有 DeviceID 的配置来构建配置对象。
 func CreateConfigWithDeviceID(existing *types.Config, serverURL, webURL string) *types.Config {
 	cfg := &types.Config{
 		ServerURL: serverURL,
