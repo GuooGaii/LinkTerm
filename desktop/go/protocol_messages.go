@@ -1,9 +1,7 @@
 package main
 
 import (
-	"encoding/json"
-
-	"terminal-client/types"
+    "terminal-client/types"
 )
 
 // Message 简化的消息结构 - 只有3种类型
@@ -67,27 +65,9 @@ type InitArgs struct {
 	Rows int `json:"rows"`
 }
 
-// ConnectedArgs 连接通知参数
-type ConnectedArgs struct {
-	DeviceType string `json:"deviceType"` // "desktop" or "web"
-}
+// (ConnectedArgs removed: unused)
 
-// 辅助函数
-func NewMessage(msgType string, data interface{}) (*Message, error) {
-	return &Message{Type: msgType, Data: data}, nil
-}
-
-func (m *Message) ToJSON() ([]byte, error) {
-	return json.Marshal(m)
-}
-
-func ParseMessage(data []byte) (*Message, error) {
-	var msg Message
-	if err := json.Unmarshal(data, &msg); err != nil {
-		return nil, err
-	}
-	return &msg, nil
-}
+// (NewMessage/ToJSON/ParseMessage removed: unused)
 
 // 快捷创建函数
 func NewInput(data string) *Message {

@@ -92,15 +92,7 @@ func (c *WebSocketClient) ensureSession(id string) (*terminalSession, error) {
 	return session, nil
 }
 
-func (c *WebSocketClient) getSession(id string) (*terminalSession, bool) {
-	terminalID := c.normalizeTerminalID(id)
 
-	c.mu.Lock()
-	session, ok := c.sessions[terminalID]
-	c.mu.Unlock()
-
-	return session, ok
-}
 
 func (c *WebSocketClient) closeSession(id string) {
 	terminalID := c.normalizeTerminalID(id)

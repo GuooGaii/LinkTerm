@@ -58,10 +58,7 @@ func (c *TermConfigCommand) Usage() string {
   termconfig reset`
 }
 
-// SubCommands 返回支持的子命令列表。
-func (c *TermConfigCommand) SubCommands() []string {
-	return []string{"font", "font-size", "theme", "opacity", "cursor", "line-height", "list", "reset"}
-}
+// (SubCommands removed: unused)
 
 // Execute 运行 termconfig 命令。
 func (c *TermConfigCommand) Execute(args []string) (bool, string) {
