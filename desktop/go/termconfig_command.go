@@ -1,4 +1,4 @@
-package termconfig
+package main
 
 import (
 	"encoding/json"
@@ -9,31 +9,23 @@ import (
 	"strings"
 
 	"github.com/AlecAivazis/survey/v2"
-	"terminal-client/plugins"
 	"terminal-client/types"
 )
 
-func init() {
-	// 注册插件到全局注册表
-	plugins.RegisterPlugin("termconfig", func(pm interface{}) interface{} {
-		plugin, _ := NewPlugin(pm)
-		return plugin
-	})
+// TermConfigCommand 提供终端外观配置的内置命令实现。
+type TermConfigCommand struct {
+	runtime *CommandRuntime
 }
 
-// TermConfigPlugin 管理终端外观和行为设置的命令插件。
-type TermConfigPlugin struct{}
-
-// NewPlugin 创建 termconfig 插件（导出供插件加载器使用）。
-func NewPlugin(pm interface{}) (interface{}, error) {
-	return &TermConfigPlugin{}, nil
+// NewTermConfigCommand 创建 termconfig 命令处理器。
+func NewTermConfigCommand(runtime *CommandRuntime) *TermConfigCommand {
+	return &TermConfigCommand{
+		runtime: runtime,
+	}
 }
 
-func (p *TermConfigPlugin) CommandName() string {
-	return "termconfig"
-}
-
-func (p *TermConfigPlugin) Usage() string {
+// Usage 返回命令帮助信息。
+func (c *TermConfigCommand) Usage() string {
 	return `termconfig - 终端配置工具
 
 用法:
@@ -59,13 +51,15 @@ func (p *TermConfigPlugin) Usage() string {
   termconfig reset`
 }
 
-func (p *TermConfigPlugin) SubCommands() []string {
+// SubCommands 返回支持的子命令列表。
+func (c *TermConfigCommand) SubCommands() []string {
 	return []string{"font", "font-size", "theme", "opacity", "cursor", "line-height", "list", "reset"}
 }
 
-func (p *TermConfigPlugin) Execute(ctx plugins.CommandContext, args []string) (bool, string) {
+// Execute 运行 termconfig 命令。
+func (c *TermConfigCommand) Execute(args []string) (bool, string) {
 	if len(args) == 0 {
-		return true, p.Usage()
+		return true, c.Usage()
 	}
 
 	subCmd := args[0]
@@ -76,28 +70,28 @@ func (p *TermConfigPlugin) Execute(ctx plugins.CommandContext, args []string) (b
 
 	switch subCmd {
 	case "font", "font-family":
-		return p.handleFont(ctx, subArgs)
+		return c.handleFont(subArgs)
 	case "font-size", "size":
-		return p.handleFontSize(ctx, subArgs)
+		return c.handleFontSize(subArgs)
 	case "theme":
-		return p.handleTheme(ctx, subArgs)
+		return c.handleTheme(subArgs)
 	case "opacity":
-		return p.handleOpacity(ctx, subArgs)
+		return c.handleOpacity(subArgs)
 	case "cursor":
-		return p.handleCursor(ctx, subArgs)
+		return c.handleCursor(subArgs)
 	case "line-height":
-		return p.handleLineHeight(ctx, subArgs)
+		return c.handleLineHeight(subArgs)
 	case "list", "show", "current":
-		return p.handleList(ctx)
+		return c.handleList()
 	case "reset":
-		return p.handleReset(ctx)
+		return c.handleReset()
 	default:
-		return false, fmt.Sprintf("未知命令: %s\n\n%s", subCmd, p.Usage())
+		return false, fmt.Sprintf("未知命令: %s\n\n%s", subCmd, c.Usage())
 	}
 }
 
-func (p *TermConfigPlugin) handleFont(ctx plugins.CommandContext, args []string) (bool, string) {
-	cfg, err := p.loadConfig(ctx)
+func (c *TermConfigCommand) handleFont(args []string) (bool, string) {
+	cfg, err := c.loadConfig()
 	if err != nil {
 		return false, fmt.Sprintf("❌ 加载配置失败: %v", err)
 	}
@@ -115,20 +109,20 @@ func (p *TermConfigPlugin) handleFont(ctx plugins.CommandContext, args []string)
 			return false, fmt.Sprintf("❌ 选择字体失败: %v", err)
 		}
 
-		return p.saveAndPush(ctx, cfg, p.updateFontFamily(cfg, choice))
+		return c.saveAndPush(cfg, c.updateFontFamily(cfg, choice))
 	}
 
 	font := args[0]
 	for _, candidate := range sortedFonts {
 		if strings.EqualFold(candidate, font) {
-			return p.saveAndPush(ctx, cfg, p.updateFontFamily(cfg, candidate))
+			return c.saveAndPush(cfg, c.updateFontFamily(cfg, candidate))
 		}
 	}
 
 	return false, fmt.Sprintf("❌ 未找到字体: %s\n可用字体: %v", font, sortedFonts)
 }
 
-func (p *TermConfigPlugin) updateFontFamily(cfg *types.Config, font string) string {
+func (c *TermConfigCommand) updateFontFamily(cfg *types.Config, font string) string {
 	if cfg.Terminal == nil {
 		cfg.Terminal = types.CloneTerminal(types.DefaultTerminal())
 	}
@@ -138,8 +132,8 @@ func (p *TermConfigPlugin) updateFontFamily(cfg *types.Config, font string) stri
 	return fmt.Sprintf("✅ 字体已设置为: %s", font)
 }
 
-func (p *TermConfigPlugin) handleFontSize(ctx plugins.CommandContext, args []string) (bool, string) {
-	cfg, err := p.loadConfig(ctx)
+func (c *TermConfigCommand) handleFontSize(args []string) (bool, string) {
+	cfg, err := c.loadConfig()
 	if err != nil {
 		return false, fmt.Sprintf("❌ 加载配置失败: %v", err)
 	}
@@ -154,11 +148,11 @@ func (p *TermConfigPlugin) handleFontSize(ctx plugins.CommandContext, args []str
 	}
 
 	cfg.Terminal.FontSize = size
-	return p.saveAndPush(ctx, cfg, fmt.Sprintf("✅ 字体大小已设置为: %d", size))
+	return c.saveAndPush(cfg, fmt.Sprintf("✅ 字体大小已设置为: %d", size))
 }
 
-func (p *TermConfigPlugin) handleTheme(ctx plugins.CommandContext, args []string) (bool, string) {
-	cfg, err := p.loadConfig(ctx)
+func (c *TermConfigCommand) handleTheme(args []string) (bool, string) {
+	cfg, err := c.loadConfig()
 	if err != nil {
 		return false, fmt.Sprintf("❌ 加载配置失败: %v", err)
 	}
@@ -175,18 +169,18 @@ func (p *TermConfigPlugin) handleTheme(ctx plugins.CommandContext, args []string
 		if err := survey.AskOne(prompt, &choice); err != nil {
 			return false, fmt.Sprintf("❌ 选择主题失败: %v", err)
 		}
-		return p.saveAndPush(ctx, cfg, p.updateTheme(cfg, choice))
+		return c.saveAndPush(cfg, c.updateTheme(cfg, choice))
 	}
 
 	theme := strings.ToLower(args[0])
 	if types.HasTheme(theme) {
-		return p.saveAndPush(ctx, cfg, p.updateTheme(cfg, theme))
+		return c.saveAndPush(cfg, c.updateTheme(cfg, theme))
 	}
 
 	return false, fmt.Sprintf("❌ 未找到主题: %s\n可用主题: %v", theme, themes)
 }
 
-func (p *TermConfigPlugin) updateTheme(cfg *types.Config, theme string) string {
+func (c *TermConfigCommand) updateTheme(cfg *types.Config, theme string) string {
 	if cfg.Terminal == nil {
 		cfg.Terminal = types.CloneTerminal(types.DefaultTerminal())
 	}
@@ -195,8 +189,8 @@ func (p *TermConfigPlugin) updateTheme(cfg *types.Config, theme string) string {
 	return fmt.Sprintf("✅ 主题已设置为: %s", theme)
 }
 
-func (p *TermConfigPlugin) handleOpacity(ctx plugins.CommandContext, args []string) (bool, string) {
-	cfg, err := p.loadConfig(ctx)
+func (c *TermConfigCommand) handleOpacity(args []string) (bool, string) {
+	cfg, err := c.loadConfig()
 	if err != nil {
 		return false, fmt.Sprintf("❌ 加载配置失败: %v", err)
 	}
@@ -211,11 +205,11 @@ func (p *TermConfigPlugin) handleOpacity(ctx plugins.CommandContext, args []stri
 	}
 
 	cfg.Terminal.Opacity = opacity
-	return p.saveAndPush(ctx, cfg, fmt.Sprintf("✅ 透明度已设置为: %.1f", opacity))
+	return c.saveAndPush(cfg, fmt.Sprintf("✅ 透明度已设置为: %.1f", opacity))
 }
 
-func (p *TermConfigPlugin) handleCursor(ctx plugins.CommandContext, args []string) (bool, string) {
-	cfg, err := p.loadConfig(ctx)
+func (c *TermConfigCommand) handleCursor(args []string) (bool, string) {
+	cfg, err := c.loadConfig()
 	if err != nil {
 		return false, fmt.Sprintf("❌ 加载配置失败: %v", err)
 	}
@@ -231,17 +225,17 @@ func (p *TermConfigPlugin) handleCursor(ctx plugins.CommandContext, args []strin
 	switch strings.ToLower(args[0]) {
 	case "on", "true", "1":
 		cfg.Terminal.CursorBlink = true
-		return p.saveAndPush(ctx, cfg, "✅ 已开启光标闪烁")
+		return c.saveAndPush(cfg, "✅ 已开启光标闪烁")
 	case "off", "false", "0":
 		cfg.Terminal.CursorBlink = false
-		return p.saveAndPush(ctx, cfg, "✅ 已关闭光标闪烁")
+		return c.saveAndPush(cfg, "✅ 已关闭光标闪烁")
 	default:
 		return false, "用法: termconfig cursor [on|off]"
 	}
 }
 
-func (p *TermConfigPlugin) handleLineHeight(ctx plugins.CommandContext, args []string) (bool, string) {
-	cfg, err := p.loadConfig(ctx)
+func (c *TermConfigCommand) handleLineHeight(args []string) (bool, string) {
+	cfg, err := c.loadConfig()
 	if err != nil {
 		return false, fmt.Sprintf("❌ 加载配置失败: %v", err)
 	}
@@ -256,11 +250,11 @@ func (p *TermConfigPlugin) handleLineHeight(ctx plugins.CommandContext, args []s
 	}
 
 	cfg.Terminal.LineHeight = height
-	return p.saveAndPush(ctx, cfg, fmt.Sprintf("✅ 行高已设置为: %.2f", height))
+	return c.saveAndPush(cfg, fmt.Sprintf("✅ 行高已设置为: %.2f", height))
 }
 
-func (p *TermConfigPlugin) handleList(ctx plugins.CommandContext) (bool, string) {
-	cfg, err := p.loadConfig(ctx)
+func (c *TermConfigCommand) handleList() (bool, string) {
+	cfg, err := c.loadConfig()
 	if err != nil {
 		return false, fmt.Sprintf("❌ 加载配置失败: %v", err)
 	}
@@ -269,7 +263,7 @@ func (p *TermConfigPlugin) handleList(ctx plugins.CommandContext) (bool, string)
 	return true, fmt.Sprintf("当前配置:\n%s", string(data))
 }
 
-func (p *TermConfigPlugin) handleReset(ctx plugins.CommandContext) (bool, string) {
+func (c *TermConfigCommand) handleReset() (bool, string) {
 	prompt := &survey.Confirm{
 		Message: "确定要重置为默认配置吗？",
 		Default: false,
@@ -280,23 +274,21 @@ func (p *TermConfigPlugin) handleReset(ctx plugins.CommandContext) (bool, string
 		return true, "已取消"
 	}
 
-	cfg, err := p.loadConfig(ctx)
+	cfg, err := c.loadConfig()
 	if err != nil {
 		return false, fmt.Sprintf("❌ 加载配置失败: %v", err)
 	}
 
 	cfg.Terminal = types.CloneTerminal(types.DefaultTerminal())
-	return p.saveAndPush(ctx, cfg, "✅ 配置已重置为默认值")
+	return c.saveAndPush(cfg, "✅ 配置已重置为默认值")
 }
 
-func (p *TermConfigPlugin) loadConfig(ctx plugins.CommandContext) (*types.Config, error) {
-	if ctx == nil {
+func (c *TermConfigCommand) loadConfig() (*types.Config, error) {
+	if c.runtime == nil {
 		return nil, errors.New("命令上下文不可用")
 	}
 
-	cmdCtx := ctx
-
-	cfg, err := cmdCtx.LoadConfig()
+	cfg, err := c.runtime.LoadConfig()
 	if err != nil {
 		return &types.Config{
 			Terminal: types.CloneTerminal(types.DefaultTerminal()),
@@ -310,19 +302,17 @@ func (p *TermConfigPlugin) loadConfig(ctx plugins.CommandContext) (*types.Config
 	return cfg, nil
 }
 
-func (p *TermConfigPlugin) saveAndPush(ctx plugins.CommandContext, cfg *types.Config, message string) (bool, string) {
-	if ctx == nil {
+func (c *TermConfigCommand) saveAndPush(cfg *types.Config, message string) (bool, string) {
+	if c.runtime == nil {
 		return false, "命令上下文不可用"
 	}
 
-	cmdCtx := ctx
-
-	if err := cmdCtx.SaveConfig(cfg); err != nil {
+	if err := c.runtime.SaveConfig(cfg); err != nil {
 		return false, fmt.Sprintf("❌ 保存配置失败: %v", err)
 	}
 
 	if cfg.Terminal != nil {
-		cmdCtx.NotifyConfigUpdated(cfg.Terminal)
+		c.runtime.NotifyConfigUpdated(cfg.Terminal)
 	}
 
 	return true, message

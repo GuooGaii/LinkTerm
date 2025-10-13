@@ -1,8 +1,0 @@
-{
-  "name": "termconfig",
-  "version": "1.0.0",
-  "description": "终端配置命令 - 管理终端外观和行为设置",
-  "commandName": "termconfig",
-  "dependencies": [],
-  "entryPoint": "NewPlugin"
-}

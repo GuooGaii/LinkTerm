@@ -1,8 +1,0 @@
-{
-  "name": "info",
-  "version": "1.0.0",
-  "description": "显示系统和插件信息",
-  "commandName": "info",
-  "dependencies": [],
-  "entryPoint": "NewPlugin"
-}

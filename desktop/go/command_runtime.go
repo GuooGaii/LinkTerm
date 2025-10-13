@@ -10,7 +10,7 @@ type ConfigNotifier interface {
 	NotifyConfigUpdated(*types.TerminalConfig)
 }
 
-// CommandRuntime implements CommandContext from plugins.
+// CommandRuntime 为内置命令提供配置读写能力。
 type CommandRuntime struct {
 	manager  *ConfigManager
 	notifier ConfigNotifier

@@ -45,16 +45,9 @@ func (r *CommandRegistrar) registerWindows() error {
 	for _, cmdName := range r.commands {
 		scriptPath := filepath.Join(r.tempDir, cmdName+".bat")
 
-		var content string
-		if cmdName == "termconfig" {
-			content = fmt.Sprintf(`@echo off
-"%s" config %%*
-`, r.programPath)
-		} else {
-			content = fmt.Sprintf(`@echo off
-"%s" plugin %s %%*
+		content := fmt.Sprintf(`@echo off
+"%s" %s %%*
 `, r.programPath, cmdName)
-		}
 
 		if err := os.WriteFile(scriptPath, []byte(content), 0o755); err != nil {
 			return fmt.Errorf("创建批处理文件 %s 失败: %w", cmdName, err)
@@ -76,16 +69,9 @@ func (r *CommandRegistrar) registerUnix() error {
 	for _, cmdName := range r.commands {
 		scriptPath := filepath.Join(r.tempDir, cmdName)
 
-		var content string
-		if cmdName == "termconfig" {
-			content = fmt.Sprintf(`#!/bin/bash
-"%s" config "$@"
-`, r.programPath)
-		} else {
-			content = fmt.Sprintf(`#!/bin/bash
-"%s" plugin %s "$@"
+		content := fmt.Sprintf(`#!/bin/bash
+"%s" %s "$@"
 `, r.programPath, cmdName)
-		}
 
 		if err := os.WriteFile(scriptPath, []byte(content), 0o755); err != nil {
 			return fmt.Errorf("创建脚本文件 %s 失败: %w", cmdName, err)

@@ -11,23 +11,21 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
-	"terminal-client/plugins"
 )
 
 const defaultTerminalID = "default"
 
 type WebSocketClient struct {
-	config        *Config
-	configManager *ConfigManager
-	ws            *websocket.Conn
-	sessionID     string
-	mu            sync.Mutex
-	stopChan      chan struct{}
-	reconnectCh   chan struct{}
-	pluginManager *PluginManager
-	commandCtx    plugins.CommandContext
-	lastConfigMod time.Time
-	sessions      map[string]*terminalSession
+	config         *Config
+	configManager  *ConfigManager
+	ws             *websocket.Conn
+	sessionID      string
+	mu             sync.Mutex
+	stopChan       chan struct{}
+	reconnectCh    chan struct{}
+	commandRuntime *CommandRuntime
+	lastConfigMod  time.Time
+	sessions       map[string]*terminalSession
 }
 
 type terminalSession struct {
@@ -47,12 +45,8 @@ func NewWebSocketClient(cfg *Config, manager *ConfigManager) *WebSocketClient {
 	return client
 }
 
-func (c *WebSocketClient) SetPluginManager(pm *PluginManager) {
-	c.pluginManager = pm
-}
-
-func (c *WebSocketClient) SetCommandContext(ctx plugins.CommandContext) {
-	c.commandCtx = ctx
+func (c *WebSocketClient) SetCommandRuntime(runtime *CommandRuntime) {
+	c.commandRuntime = runtime
 }
 
 func (c *WebSocketClient) normalizeTerminalID(id string) string {
@@ -442,44 +436,45 @@ func (c *WebSocketClient) handleSystemCommand(command string, terminalID string)
 			}
 		}
 	default:
-		// 尝试通过插件管理器执行命令
-		if c.pluginManager != nil {
-			c.handlePluginCommand(command, targetID)
-		} else {
+		if !c.handleCommand(command, targetID) {
 			log.Printf("未知系统命令: %s", command)
 		}
 	}
 }
 
-// handlePluginCommand 处理插件命令
-func (c *WebSocketClient) handlePluginCommand(commandLine string, terminalID string) {
+// handleCommand 处理内置命令
+func (c *WebSocketClient) handleCommand(commandLine string, terminalID string) bool {
 	// 解析命令行：termconfig font Consolas
 	parts := strings.Fields(commandLine)
 	if len(parts) == 0 {
-		return
+		return false
 	}
 
-	pluginName := parts[0]
+	cmdName := parts[0]
 	args := parts[1:]
 
-	log.Printf("🔌 执行插件命令: %s %v", pluginName, args)
+	switch cmdName {
+	case "termconfig", "config":
+		if c.commandRuntime == nil {
+			log.Printf("⚠️  termconfig 命令上下文不可用，无法执行: %s", commandLine)
+			return true
+		}
 
-	if c.commandCtx == nil {
-		log.Printf("⚠️  插件命令上下文不可用，无法执行: %s", commandLine)
-		return
+		cmd := NewTermConfigCommand(c.commandRuntime)
+		success, output := cmd.Execute(args)
+
+		if !success {
+			log.Printf("❌ termconfig 命令执行失败: %s", strings.TrimSpace(output))
+		} else {
+			log.Printf("✅ termconfig 命令执行成功: %s", strings.TrimSpace(output))
+		}
+
+		// 将输出发送到前端
+		c.sendTerminalOutput(terminalID, output+"\n")
+		return true
+	default:
+		return false
 	}
-
-	// 通过插件管理器执行
-	success, output := c.pluginManager.ExecuteCommand(pluginName, c.commandCtx, args)
-
-	if !success {
-		log.Printf("❌ 插件命令执行失败: %s", output)
-	} else {
-		log.Printf("✅ 插件命令执行成功: %s", strings.TrimSpace(output))
-	}
-
-	// 将输出发送到前端
-	c.sendTerminalOutput(terminalID, output+"\n")
 }
 
 func (c *WebSocketClient) send(msg *Message) error {

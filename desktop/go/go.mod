@@ -3,13 +3,14 @@ module terminal-client
 go 1.24.0
 
 require (
+	github.com/AlecAivazis/survey/v2 v2.3.7
 	github.com/aymanbagabas/go-pty v0.2.3-0.20250905142912-8d03eacf10f4
 	github.com/google/uuid v1.5.0
 	github.com/gorilla/websocket v1.5.1
 )
 
 require (
-	github.com/AlecAivazis/survey/v2 v2.3.7 // indirect
+	github.com/creack/pty v1.1.24 // indirect
 	github.com/kballard/go-shellquote v0.0.0-20180428030007-95032a82bc51 // indirect
 	github.com/mattn/go-colorable v0.1.2 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
