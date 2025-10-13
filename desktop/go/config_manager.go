@@ -78,18 +78,16 @@ func EnsureDeviceID(cfg *types.Config) bool {
 // CreateConfigWithDeviceID builds a config using supplied endpoints and an optional
 // existing configuration for reusing the DeviceID.
 func CreateConfigWithDeviceID(existing *types.Config, serverURL, webURL string) *types.Config {
-	deviceID := ""
-	if existing != nil {
-		deviceID = existing.DeviceID
-	}
-	if deviceID == "" {
-		deviceID = uuid.New().String()
-	}
-
-	return &types.Config{
+	cfg := &types.Config{
 		ServerURL: serverURL,
 		WebURL:    webURL,
-		DeviceID:  deviceID,
 		Terminal:  types.CloneTerminal(types.DefaultTerminal()),
 	}
+
+	if existing != nil {
+		cfg.DeviceID = existing.DeviceID
+	}
+
+	EnsureDeviceID(cfg)
+	return cfg
 }

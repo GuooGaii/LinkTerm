@@ -89,7 +89,7 @@ func executeTermConfigCommand(args []string, configPath string) {
 	log.SetOutput(io.Discard) // 禁用日志输出
 	defer log.SetOutput(prevOutput)
 
-	command := NewTermConfigCommand(NewCommandRuntime(cfgManager, nil))
+	command := NewTermConfigCommand(cfgManager, nil)
 	success, output := command.Execute(args)
 	fmt.Print(output)
 	if !success {
@@ -120,8 +120,6 @@ func runServer(cfgManager *ConfigManager, cfg *Config) {
 	}
 
 	client := NewWebSocketClient(cfg, cfgManager)
-	commandRuntime := NewCommandRuntime(cfgManager, client)
-	client.SetCommandRuntime(commandRuntime)
 
 	if err := client.Start(); err != nil {
 		if registrar != nil {

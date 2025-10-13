@@ -16,16 +16,15 @@ import (
 const defaultTerminalID = "default"
 
 type WebSocketClient struct {
-	config         *Config
-	configManager  *ConfigManager
-	ws             *websocket.Conn
-	sessionID      string
-	mu             sync.Mutex
-	stopChan       chan struct{}
-	reconnectCh    chan struct{}
-	commandRuntime *CommandRuntime
-	lastConfigMod  time.Time
-	sessions       map[string]*terminalSession
+	config        *Config
+	configManager *ConfigManager
+	ws            *websocket.Conn
+	sessionID     string
+	mu            sync.Mutex
+	stopChan      chan struct{}
+	reconnectCh   chan struct{}
+	lastConfigMod time.Time
+	sessions      map[string]*terminalSession
 }
 
 type terminalSession struct {
@@ -43,10 +42,6 @@ func NewWebSocketClient(cfg *Config, manager *ConfigManager) *WebSocketClient {
 		sessions:      make(map[string]*terminalSession),
 	}
 	return client
-}
-
-func (c *WebSocketClient) SetCommandRuntime(runtime *CommandRuntime) {
-	c.commandRuntime = runtime
 }
 
 func (c *WebSocketClient) normalizeTerminalID(id string) string {
@@ -310,23 +305,13 @@ func (c *WebSocketClient) handleMessages() {
 func (c *WebSocketClient) handleMessage(msg *Message) {
 	switch msg.Type {
 	case TypeInput:
-		// 处理输入
 		if data, ok := msg.Data.(string); ok {
-			sess, err := c.ensureSession("default")
-			if err != nil {
-				log.Printf("确保终端会话失败: %v", err)
-				return
-			}
-
-			if sess.manager != nil {
-				if err := sess.manager.Write([]byte(data)); err != nil {
-					log.Printf("写入终端失败: %v", err)
-				}
+			if err := c.writeToSession(defaultTerminalID, []byte(data)); err != nil {
+				log.Printf("写入终端失败: %v", err)
 			}
 		}
 
 	case TypeSystem:
-		// 处理系统消息
 		c.handleSystemMessage(msg.Data)
 
 	default:
@@ -355,7 +340,7 @@ func (c *WebSocketClient) handleSystemMessage(data interface{}) {
 			cols := int(args["cols"].(float64))
 			rows := int(args["rows"].(float64))
 
-			sess, err := c.ensureSession("default")
+			sess, err := c.ensureSession(defaultTerminalID)
 			if err != nil {
 				log.Printf("确保终端会话失败: %v", err)
 				return
@@ -372,17 +357,14 @@ func (c *WebSocketClient) handleSystemMessage(data interface{}) {
 
 	case SysCmdClear:
 		// 清屏
-		sess, _ := c.ensureSession("default")
-		if sess != nil && sess.manager != nil {
-			sess.manager.Write([]byte("\x1b[2J\x1b[H"))
+		if err := c.writeToSession(defaultTerminalID, []byte("\x1b[2J\x1b[H")); err != nil {
+			log.Printf("清屏失败: %v", err)
 		}
 
 	case SysCmdRestart:
-		// 重启终端
-		c.restartSession("default")
+		c.restartSession(defaultTerminalID)
 
 	case SysCmdPing:
-		// 响应 ping
 		c.send(NewSystem(SysCmdPong, nil))
 
 	case SysCmdConnected:
@@ -398,15 +380,12 @@ func (c *WebSocketClient) handleSystemMessage(data interface{}) {
 		}
 
 	case "ctrl_c":
-		// Ctrl+C
-		sess, _ := c.ensureSession("default")
-		if sess != nil && sess.manager != nil {
-			sess.manager.Write([]byte("\x03"))
+		if err := c.writeToSession(defaultTerminalID, []byte("\x03")); err != nil {
+			log.Printf("发送 Ctrl+C 失败: %v", err)
 		}
 
 	default:
-		// 尝试作为命令处理
-		c.handleSystemCommand(sysData.Cmd, "default")
+		c.handleSystemCommand(sysData.Cmd, defaultTerminalID)
 	}
 }
 
@@ -424,22 +403,29 @@ func (c *WebSocketClient) handleSystemCommand(command string, terminalID string)
 		log.Printf("🔄 重启终端进程: %s", targetID)
 		c.restartSession(targetID)
 	case "clear":
-		if sess, err := c.ensureSession(targetID); err == nil && sess.manager != nil {
-			if err := sess.manager.Write([]byte("\x1b[2J\x1b[H")); err != nil {
-				log.Printf("清屏失败 [%s]: %v", targetID, err)
-			}
+		if err := c.writeToSession(targetID, []byte("\x1b[2J\x1b[H")); err != nil {
+			log.Printf("清屏失败 [%s]: %v", targetID, err)
 		}
 	case "ctrl_c":
-		if sess, err := c.ensureSession(targetID); err == nil && sess.manager != nil {
-			if err := sess.manager.Write([]byte("\x03")); err != nil {
-				log.Printf("发送 Ctrl+C 失败 [%s]: %v", targetID, err)
-			}
+		if err := c.writeToSession(targetID, []byte("\x03")); err != nil {
+			log.Printf("发送 Ctrl+C 失败 [%s]: %v", targetID, err)
 		}
 	default:
 		if !c.handleCommand(command, targetID) {
 			log.Printf("未知系统命令: %s", command)
 		}
 	}
+}
+
+func (c *WebSocketClient) writeToSession(terminalID string, data []byte) error {
+	session, err := c.ensureSession(terminalID)
+	if err != nil {
+		return err
+	}
+	if session.manager == nil {
+		return fmt.Errorf("终端会话未准备好: %s", terminalID)
+	}
+	return session.manager.Write(data)
 }
 
 // handleCommand 处理内置命令
@@ -455,12 +441,12 @@ func (c *WebSocketClient) handleCommand(commandLine string, terminalID string) b
 
 	switch cmdName {
 	case "termconfig", "config":
-		if c.commandRuntime == nil {
-			log.Printf("⚠️  termconfig 命令上下文不可用，无法执行: %s", commandLine)
+		if c.configManager == nil {
+			log.Printf("⚠️  配置管理器不可用，无法执行: %s", commandLine)
 			return true
 		}
 
-		cmd := NewTermConfigCommand(c.commandRuntime)
+		cmd := NewTermConfigCommand(c.configManager, c)
 		success, output := cmd.Execute(args)
 
 		if !success {

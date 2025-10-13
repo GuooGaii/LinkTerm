@@ -12,15 +12,22 @@ import (
 	"terminal-client/types"
 )
 
+// ConfigNotifier defines the contract for propagating config updates.
+type ConfigNotifier interface {
+	NotifyConfigUpdated(*types.TerminalConfig)
+}
+
 // TermConfigCommand 提供终端外观配置的内置命令实现。
 type TermConfigCommand struct {
-	runtime *CommandRuntime
+	manager  *ConfigManager
+	notifier ConfigNotifier
 }
 
 // NewTermConfigCommand 创建 termconfig 命令处理器。
-func NewTermConfigCommand(runtime *CommandRuntime) *TermConfigCommand {
+func NewTermConfigCommand(manager *ConfigManager, notifier ConfigNotifier) *TermConfigCommand {
 	return &TermConfigCommand{
-		runtime: runtime,
+		manager:  manager,
+		notifier: notifier,
 	}
 }
 
@@ -284,35 +291,31 @@ func (c *TermConfigCommand) handleReset() (bool, string) {
 }
 
 func (c *TermConfigCommand) loadConfig() (*types.Config, error) {
-	if c.runtime == nil {
-		return nil, errors.New("命令上下文不可用")
+	if c.manager == nil {
+		return nil, errors.New("配置管理器不可用")
 	}
 
-	cfg, err := c.runtime.LoadConfig()
+	cfg, err := c.manager.Load()
 	if err != nil {
 		return &types.Config{
 			Terminal: types.CloneTerminal(types.DefaultTerminal()),
 		}, nil
 	}
 
-	if cfg.Terminal == nil {
-		cfg.Terminal = types.CloneTerminal(types.DefaultTerminal())
-	}
-
 	return cfg, nil
 }
 
 func (c *TermConfigCommand) saveAndPush(cfg *types.Config, message string) (bool, string) {
-	if c.runtime == nil {
-		return false, "命令上下文不可用"
+	if c.manager == nil {
+		return false, "配置管理器不可用"
 	}
 
-	if err := c.runtime.SaveConfig(cfg); err != nil {
+	if err := c.manager.Save(cfg); err != nil {
 		return false, fmt.Sprintf("❌ 保存配置失败: %v", err)
 	}
 
-	if cfg.Terminal != nil {
-		c.runtime.NotifyConfigUpdated(cfg.Terminal)
+	if cfg.Terminal != nil && c.notifier != nil {
+		c.notifier.NotifyConfigUpdated(cfg.Terminal)
 	}
 
 	return true, message
@@ -332,35 +335,23 @@ func extractMainFont(fontFamily string) string {
 	return ""
 }
 
-var defaultFontCandidates = []string{
-	"JetBrains Mono",
-	"Fira Code",
-	"Source Code Pro",
-	"Cascadia Code",
-	"Monaco",
-	"Consolas",
-	"Inconsolata",
-	"Menlo",
-	"Ubuntu Mono",
-	"DejaVu Sans Mono",
-	"IBM Plex Mono",
-}
-
 func getSortedFonts() []string {
-	fontSet := map[string]struct{}{}
-	for _, font := range defaultFontCandidates {
+	fonts := types.AvailableFonts()
+	set := make(map[string]struct{}, len(fonts))
+	result := make([]string, 0, len(fonts))
+
+	for _, font := range fonts {
 		trimmed := strings.TrimSpace(font)
 		if trimmed == "" {
 			continue
 		}
-		fontSet[trimmed] = struct{}{}
+		if _, exists := set[trimmed]; exists {
+			continue
+		}
+		set[trimmed] = struct{}{}
+		result = append(result, trimmed)
 	}
 
-	fonts := make([]string, 0, len(fontSet))
-	for font := range fontSet {
-		fonts = append(fonts, font)
-	}
-
-	sort.Strings(fonts)
-	return fonts
+	sort.Strings(result)
+	return result
 }

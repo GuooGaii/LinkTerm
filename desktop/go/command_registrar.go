@@ -11,7 +11,6 @@ import (
 // CommandRegistrar manages temporary command registrations for the current session.
 type CommandRegistrar struct {
 	tempDir     string
-	scriptPaths []string
 	programPath string
 	commands    []string
 }
@@ -23,7 +22,6 @@ func NewCommandRegistrar(commands []string) *CommandRegistrar {
 	return &CommandRegistrar{
 		programPath: programPath,
 		commands:    commands,
-		scriptPaths: make([]string, 0),
 	}
 }
 
@@ -36,53 +34,26 @@ func (r *CommandRegistrar) Register() error {
 	r.tempDir = tempDir
 
 	if runtime.GOOS == "windows" {
-		return r.registerWindows()
+		return r.registerCommands(".bat", windowsWrapperTemplate, ";")
 	}
-	return r.registerUnix()
+	return r.registerCommands("", unixWrapperTemplate, ":")
 }
 
-func (r *CommandRegistrar) registerWindows() error {
+func (r *CommandRegistrar) registerCommands(suffix, scriptTemplate, pathSeparator string) error {
 	for _, cmdName := range r.commands {
-		scriptPath := filepath.Join(r.tempDir, cmdName+".bat")
+		scriptPath := filepath.Join(r.tempDir, cmdName+suffix)
 
-		content := fmt.Sprintf(`@echo off
-"%s" %s %%*
-`, r.programPath, cmdName)
+		content := fmt.Sprintf(scriptTemplate, r.programPath, cmdName)
 
 		if err := os.WriteFile(scriptPath, []byte(content), 0o755); err != nil {
-			return fmt.Errorf("创建批处理文件 %s 失败: %w", cmdName, err)
+			return fmt.Errorf("创建命令脚本 %s 失败: %w", cmdName, err)
 		}
 
-		r.scriptPaths = append(r.scriptPaths, scriptPath)
 		log.Printf("✅ %s 命令已注册: %s", cmdName, scriptPath)
 	}
 
 	currentPath := os.Getenv("PATH")
-	newPath := r.tempDir + ";" + currentPath
-	os.Setenv("PATH", newPath)
-	log.Printf("   提示: 现在可以在终端中使用这些命令了: %v", r.commands)
-
-	return nil
-}
-
-func (r *CommandRegistrar) registerUnix() error {
-	for _, cmdName := range r.commands {
-		scriptPath := filepath.Join(r.tempDir, cmdName)
-
-		content := fmt.Sprintf(`#!/bin/bash
-"%s" %s "$@"
-`, r.programPath, cmdName)
-
-		if err := os.WriteFile(scriptPath, []byte(content), 0o755); err != nil {
-			return fmt.Errorf("创建脚本文件 %s 失败: %w", cmdName, err)
-		}
-
-		r.scriptPaths = append(r.scriptPaths, scriptPath)
-		log.Printf("✅ %s 命令已注册: %s", cmdName, scriptPath)
-	}
-
-	currentPath := os.Getenv("PATH")
-	newPath := r.tempDir + ":" + currentPath
+	newPath := r.tempDir + pathSeparator + currentPath
 	os.Setenv("PATH", newPath)
 	log.Printf("   提示: 现在可以在终端中使用这些命令了: %v", r.commands)
 
@@ -99,3 +70,12 @@ func (r *CommandRegistrar) Unregister() {
 		}
 	}
 }
+
+const (
+	windowsWrapperTemplate = `@echo off
+"%s" %s %%*
+`
+	unixWrapperTemplate = `#!/bin/bash
+"%s" %s "$@"
+`
+)
