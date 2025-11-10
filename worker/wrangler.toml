@@ -1,7 +1,7 @@
 # For more details on how to configure Wrangler, refer to:
 # https://developers.cloudflare.com/workers/wrangler/configuration/
 
-name = "terminal"
+name = "wsxterm"
 main = "src/index.js"
 compatibility_date = "2025-09-12"
 
@@ -14,14 +14,8 @@ class_name = "SessionManager"
 name = "SESSIONS"
 
 [[migrations]]
-tag = "v3"
+tag = "v1"
 new_sqlite_classes = ["SessionManager"]
-deleted_classes = ["TerminalSessionManager"]
 
 [observability]
 enabled = true
-
-# Uncomment and fill in your custom domain if needed
-# [[routes]]
-# pattern = "terminal.chatnext.ai"
-# custom_domain = true
