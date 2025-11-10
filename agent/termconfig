@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+if [[ -x "$DIR/terminal" ]]; then
+  exec "$DIR/terminal" termconfig "$@"
+elif [[ -x "$DIR/terminal.exe" ]]; then
+  exec "$DIR/terminal.exe" termconfig "$@"
+elif command -v go >/dev/null 2>&1; then
+  cd "$DIR"
+  exec go run . termconfig "$@"
+else
+  echo "terminal binary not found next to script, and Go toolchain not found in PATH" >&2
+  exit 1
+fi

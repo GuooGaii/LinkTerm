@@ -63,3 +63,4 @@ desktop/go/terminal
 desktop/go/termconfig
 
 *.jsonnul
+*.json
