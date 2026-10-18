@@ -10,6 +10,8 @@ export async function authenticate(request, env) {
     const b = await crypto.subtle.digest('SHA-256', enc.encode(expected));
     return env.AGENT_TOKEN && crypto.subtle.timingSafeEqual(a, b) ? { role: 'agent' } : null;
   }
+  // Explicit, hostname-scoped opt-in for temporary public testing. Agent auth stays mandatory.
+  if (env.PUBLIC_TEST_HOST && url.hostname === env.PUBLIC_TEST_HOST) return { role: 'web' };
   const token = request.headers.get('Cf-Access-Jwt-Assertion');
   if (!token || !env.ACCESS_TEAM_DOMAIN || !env.ACCESS_AUD || !env.ALLOWED_EMAIL) return null;
   try {

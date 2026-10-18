@@ -62,3 +62,5 @@ Agent 只能在你希望共享的容器内运行，以该容器用户身份访�
 测试使用终端协议样例，没有把每个版本的 Codex/Claude 都作为自动化测试依赖。
 
 MIT
+
+公开测试可显式设置 `PUBLIC_TEST_HOST` 为网页域名，并将对应 Access 策略改为 Bypass Everyone；该域名的网页终端将无需登录。未配置该变量时仍要求 Access。Agent 密钥认证始终保留。恢复认证时删除该变量并恢复 Access 邮箱策略。
