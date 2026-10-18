@@ -44,7 +44,7 @@ func (m *PTYManager) StartSized(cols, rows int) error {
 		m.pty.Close()
 		return err
 	}
-	m.cmd = m.pty.Command("tmux", "attach-session", "-t", "="+session)
+	m.cmd = m.pty.Command("tmux", "-u", "attach-session", "-t", "="+session)
 	for _, e := range os.Environ() {
 		if !strings.HasPrefix(e, "TERM=") && !strings.HasPrefix(e, "COLORTERM=") && !strings.HasPrefix(e, "TMUX=") {
 			m.cmd.Env = append(m.cmd.Env, e)

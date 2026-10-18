@@ -14,7 +14,8 @@ func TestAttachResizeReconnectPreservesExistingSession(t *testing.T) {
 	t.Setenv("TMUX_TMPDIR", t.TempDir())
 	t.Setenv("LINKTERM_TMUX_SESSION", "linkterm-test")
 	t.Setenv("TERM", "xterm-256color")
-	if b, err := exec.Command("tmux", "new-session", "-d", "-s", "linkterm-test", "sh -c 'printf ORIGINAL_SESSION; exec sleep 120'").CombinedOutput(); err != nil {
+	t.Setenv("LC_ALL", "C")
+	if b, err := exec.Command("tmux", "new-session", "-d", "-s", "linkterm-test", "sh -c 'printf ORIGINAL_SESSION中文验证; exec sleep 120'").CombinedOutput(); err != nil {
 		t.Fatalf("%s: %v", b, err)
 	}
 	defer exec.Command("tmux", "kill-server").Run()
@@ -25,7 +26,7 @@ func TestAttachResizeReconnectPreservesExistingSession(t *testing.T) {
 		}
 		var output strings.Builder
 		timer := time.NewTimer(5 * time.Second)
-		for !strings.Contains(output.String(), "ORIGINAL_SESSION") {
+		for !strings.Contains(output.String(), "ORIGINAL_SESSION中文验证") {
 			select {
 			case b := <-m.Output():
 				output.Write(b)
