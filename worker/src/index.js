@@ -14,12 +14,17 @@ export class SessionManager extends DurableObject {
     const role = request.headers.get('X-LinkTerm-Role');
     if (!['web', 'agent'].includes(role)) return new Response('Forbidden', { status: 403 });
     const old = this.peers(role);
-    // One controller: do not steal its terminal or create reconnect fights.
-    if (old.length) return new Response('A connection is already active', { status: 409 });
+    const url = new URL(request.url);
+    const clientId = url.searchParams.get('client') || null;
+    const replace = role === 'web' && (url.searchParams.get('takeover') === '1' || (clientId && old.every(s => s.deserializeAttachment().clientId === clientId)));
+    if (old.length && !replace) return new Response('A connection is already active', { status: 409 });
+    for (const previous of old) {
+      this.disconnected(previous, 4002, 'Control transferred to another connection');
+    }
     const [client, server] = Object.values(new WebSocketPair());
     const expires = Number(request.headers.get('X-LinkTerm-Expires')) || 0;
     this.ctx.acceptWebSocket(server, [role]);
-    server.serializeAttachment({ role, active: true, expires, epoch: null });
+    server.serializeAttachment({ role, active: true, expires, epoch: null, clientId });
     if (role === 'web') server.send(JSON.stringify({ type: 'system', data: { cmd: this.peers('agent').length ? 'connected' : 'disconnected' } }));
     else this.send('web', { type: 'system', data: { cmd: 'connected' } });
     if (expires) {
@@ -47,13 +52,13 @@ export class SessionManager extends DurableObject {
   }
   webSocketClose(ws) { this.disconnected(ws); }
   webSocketError(ws) { this.disconnected(ws); }
-  disconnected(ws) {
+  disconnected(ws, code = 1000, reason = 'Disconnected') {
     const a = ws.deserializeAttachment();
     if (!a?.active) return;
     ws.serializeAttachment({ ...a, active: false });
     if (a.role === 'agent') this.send('web', { type: 'system', data: { cmd: 'disconnected' } });
     else this.send('agent', { type: 'system', epoch: a.epoch, data: { cmd: 'detach' } });
-    try { ws.close(1000, 'Disconnected'); } catch {}
+    try { ws.close(code, reason); } catch {}
   }
   async alarm() {
     let next = Infinity;

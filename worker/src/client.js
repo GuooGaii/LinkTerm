@@ -7,6 +7,8 @@ import './style.css';
 const el = document.querySelector('#terminal');
 const status = document.querySelector('#status');
 const reconnect = document.querySelector('#reconnect');
+const clientId = sessionStorage.getItem('linkterm-client') || crypto.randomUUID();
+sessionStorage.setItem('linkterm-client', clientId);
 let terminal, fit, ws, epoch, ready = false, lastSize, retry, heartbeat, lastPong, generation = 0;
 function show(text) { status.textContent = text; }
 function send(message) { if (ws?.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ ...message, epoch })); }
@@ -28,11 +30,11 @@ function attach() {
   send({ type: 'system', data: { cmd: 'attach', args: lastSize } });
   show('正在恢复 tmux 会话…');
 }
-function connect() {
+function connect(takeover = false) {
   clearTimeout(retry); clearInterval(heartbeat);
   const gen = ++generation;
   ws?.close(); ready = false;
-  const socket = new WebSocket(`${location.protocol === 'https:' ? 'wss:' : 'ws:'}//${location.host}/ws`);
+  const socket = new WebSocket(`${location.protocol === 'https:' ? 'wss:' : 'ws:'}//${location.host}/ws?client=${encodeURIComponent(clientId)}${takeover ? '&takeover=1' : ''}`);
   ws = socket;
   show('连接中…');
   socket.onopen = () => {
@@ -64,8 +66,9 @@ function connect() {
     if (gen !== generation) return;
     ready = false; clearInterval(heartbeat);
     if (e.code === 4001) { show('登录已过期，请刷新页面重新登录'); return; }
-    show('连接中断或另一网页正在控制；3 秒后重试…');
-    retry = setTimeout(connect, 3000);
+    if (e.code === 4002) { show('控制权已转移；点击重新连接可接管'); return; }
+    show('连接中断或被占用；点击重新连接可接管');
+    retry = setTimeout(() => connect(), 3000);
   };
   socket.onerror = () => { if (gen === generation) show('连接失败；请确认已登录且没有其他控制窗口'); };
 }
@@ -78,7 +81,7 @@ new ResizeObserver(() => {
     if (!sameSize(lastSize, size)) { lastSize = size; send({ type: 'system', data: { cmd: 'resize', args: size } }); }
   }, 120);
 }).observe(el);
-reconnect.onclick = connect;
+reconnect.onclick = () => connect(true);
 window.addEventListener('beforeunload', () => { ++generation; ws?.close(); });
 await document.fonts.ready;
 connect();

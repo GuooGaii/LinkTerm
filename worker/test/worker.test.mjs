@@ -17,7 +17,7 @@ test('real Worker validates Access and agent credentials; forwards bytes and rej
   assert.equal((await mf.dispatchFetch('https://local/ws',{headers:{...headers,Origin:'https://evil'}})).status,403);
   const agent=(await mf.dispatchFetch('https://local/agent',{headers:{Authorization:'Bearer test-secret',Upgrade:'websocket'}})).webSocket;
   assert.ok(agent);agent.accept();sockets.push(agent);
-  const web=(await mf.dispatchFetch('https://local/ws',{headers:{...headers,'X-LinkTerm-Role':'agent'}})).webSocket;
+  let web=(await mf.dispatchFetch('https://local/ws',{headers:{...headers,'X-LinkTerm-Role':'agent'}})).webSocket;
   assert.ok(web);web.accept();sockets.push(web);
   const message = s => new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(new Error('timeout')),3000);s.addEventListener('message',e=>{clearTimeout(timer);resolve(JSON.parse(e.data))},{once:true});});
   let received=message(agent);
@@ -25,6 +25,11 @@ test('real Worker validates Access and agent credentials; forwards bytes and rej
   assert.equal((await received).data.args.cols,90);
   received=message(web);agent.send(JSON.stringify({type:'output',epoch:'first',data:'G1sySg=='}));assert.equal((await received).data,'G1sySg==');
   assert.equal((await mf.dispatchFetch('https://local/ws',{headers})).status,409);
+  const replaced=new Promise(resolve=>web.addEventListener('close',resolve,{once:true}));
+  const replacement=await mf.dispatchFetch('https://local/ws?client=new&takeover=1',{headers});
+  assert.equal(replacement.status,101);
+  assert.equal((await replaced).code,4002);
+  web=replacement.webSocket;web.accept();sockets.push(web);
   const closed=new Promise(resolve=>web.addEventListener('close',resolve,{once:true}));
   web.send(JSON.stringify({type:'output',epoch:'first',data:'YWJj'}));
   assert.equal((await closed).code,1008);
