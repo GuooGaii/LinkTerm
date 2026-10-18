@@ -65,3 +65,8 @@ desktop/go/termconfig
 *.jsonnul
 *.json
 agents.md
+!worker/package.json
+!worker/package-lock.json
+worker/.dev.vars*
+agent/linkterm
+worker/wrangler.friend.jsonc

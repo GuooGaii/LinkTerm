@@ -1,0 +1,9 @@
+FROM golang:1.25-bookworm AS build
+RUN apt-get update && apt-get install -y --no-install-recommends tmux && rm -rf /var/lib/apt/lists/*
+WORKDIR /src
+COPY go.mod go.sum ./
+RUN go mod download
+COPY . .
+RUN gofmt -w pty_manager.go websocket_client.go && go test ./... && CGO_ENABLED=0 go build -trimpath -o /out/linkterm .
+FROM scratch
+COPY --from=build /out/linkterm /linkterm
