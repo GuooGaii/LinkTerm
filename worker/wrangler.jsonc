@@ -1,0 +1,46 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "linkterm",
+  "main": "src/index.js",
+  "compatibility_date": "2026-10-18",
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
+  "build": {
+    "command": "npm run build"
+  },
+  "rules": [
+    {
+      "type": "Text",
+      "globs": [
+        "**/*.html"
+      ],
+      "fallthrough": true
+    }
+  ],
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "SESSIONS",
+        "class_name": "SessionManager"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": [
+        "SessionManager"
+      ]
+    }
+  ],
+  "vars": {
+    "SESSION_ID": "default",
+    "ACCESS_TEAM_DOMAIN": "YOUR-TEAM.cloudflareaccess.com",
+    "ACCESS_AUD": "YOUR-ACCESS-APPLICATION-AUD",
+    "ALLOWED_EMAIL": "you@example.com"
+  },
+  "observability": {
+    "enabled": true
+  }
+}
